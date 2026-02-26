@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import Note, NoteLink
 from services.embedding import get_embedding
 from services.llm import generate_summary, extract_concepts
-from services.clustering import assign_topic, recluster_all
+from services.language import detect_language
+from services.tagging import generate_tags
+from services.clustering import cluster_notes
+import asyncio
 from config import get_settings
 from database import async_session
 
@@ -47,8 +50,9 @@ async def process_note(note_id: uuid.UUID) -> None:
         return  # Cannot proceed without embedding
 
     summary = content[:300] + "..."
+    lang = detect_language(content)
     try:
-        summary = await generate_summary(content)
+        summary = await generate_summary(content, content_language=lang)
     except Exception as e:
         logger.warning(f"Summary generation failed: {e}")
 
@@ -69,15 +73,14 @@ async def process_note(note_id: uuid.UUID) -> None:
             note.embedding = embedding
             note.summary = summary
             note.key_concepts = key_concepts
-
-            # Assign topic cluster
+            note.language = lang
+            
+            # --- Auto Tags ---
             try:
-                async with db.begin_nested():
-                    topic_id = await assign_topic(db, note_id, embedding)
-                    if topic_id:
-                        note.topic_id = topic_id
+                auto_tags = await generate_tags(content, lang)
+                note.auto_tags = auto_tags
             except Exception as e:
-                logger.warning(f"Topic assignment failed: {e}")
+                logger.warning(f"Auto-tagging failed: {e}")
 
             # Bidirectional links
             try:
@@ -86,21 +89,15 @@ async def process_note(note_id: uuid.UUID) -> None:
             except Exception as e:
                 logger.warning(f"Link creation failed: {e}")
 
-            # Re-cluster check
-            try:
-                async with db.begin_nested():
-                    count_result = await db.execute(
-                        select(func.count(Note.id)).where(Note.embedding.isnot(None))
-                    )
-                    note_count = count_result.scalar()
-                    if note_count and note_count % settings.recluster_every_n == 0:
-                        await recluster_all(db)
-            except Exception as e:
-                logger.warning(f"Re-clustering failed: {e}")
-
             note.is_processed = True
+            note.processed = True
             await db.commit()
+            
             logger.info(f"✅ Successfully processed note: {title}")
+            
+            # --- Auto Clustering ---
+            # Fire-and-forget background task to re-run KMeans
+            asyncio.create_task(cluster_notes())
 
         except Exception as e:
             logger.error(f"Pipeline DB write failed for note {note_id}: {e}", exc_info=True)

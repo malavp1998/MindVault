@@ -9,26 +9,27 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault"
 
-    # Embedding provider: "openai" | "ollama" | "gemini"
-    embedding_provider: str = "openai"
+    # Embedding provider: "openai" | "gemini" | "jina"
+    embedding_provider: str = "jina"
 
-    # LLM provider: "openai" | "ollama" | "gemini"
-    llm_provider: str = "openai"
+    # LLM provider: "openai" | "gemini" | "groq"
+    llm_provider: str = "groq"
 
     # OpenAI
     openai_api_key: str = ""
     openai_embedding_model: str = "text-embedding-3-small"
     openai_llm_model: str = "gpt-4o-mini"
 
-    # Ollama
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_embedding_model: str = "nomic-embed-text"
-    ollama_llm_model: str = "llama3.2"
 
     # Gemini
     gemini_api_key: str = ""
     gemini_embedding_model: str = "gemini-embedding-001"
     gemini_llm_model: str = "gemma-3-27b-it"
+
+    # Multilingual Routing Keys
+    groq_api_key: str = ""
+    sarvam_api_key: str = ""
+    jina_api_key: str = ""
 
     # App
     backend_url: str = "http://localhost:8000"

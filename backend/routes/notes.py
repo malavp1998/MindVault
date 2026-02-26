@@ -13,13 +13,16 @@ from models import Note, NoteLink, Topic
 from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
-    RelatedNotesResponse, NoteYoutubeCreate
+    RelatedNotesResponse, NoteYoutubeCreate,
+    TagUpdate, SuggestTagsResponse
 )
 from services.embedding import get_embedding
 from services.llm import summarize_youtube_video
 from services.agent import rag_agent
+from services.language import detect_language
 from services.pipeline import process_note
-from youtube_transcript_api import YouTubeTranscriptApi
+from services.transcription import transcribe_youtube
+from services.tagging import generate_tags
 import urllib.parse
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -59,47 +62,28 @@ async def create_youtube_note(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch YouTube transcript, summarize via LLM, and save as a new note."""
-    # 1. Extract video ID
+    # 1. Fetch transcript and detect language from the new cloud service
     try:
-        parsed_url = urllib.parse.urlparse(body.video_url)
-        video_id = None
-        if "youtube.com" in parsed_url.netloc:
-            qs = urllib.parse.parse_qs(parsed_url.query)
-            video_id = qs.get("v", [None])[0]
-        elif "youtu.be" in parsed_url.netloc:
-            video_id = parsed_url.path.lstrip("/")
-        
-        if not video_id:
-            raise ValueError("No video ID in URL")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-
-    # 2. Fetch transcript
-    try:
-        # get_transcript returns a list of dictionaries with 'text'
-        ytt_api = YouTubeTranscriptApi()
-        transcript_list = ytt_api.list(video_id)
-        transcript = transcript_list.find_transcript(["en"])
-        transcript_data = transcript.fetch()
-        transcript_text = " ".join([t.text for t in transcript_data])
+        transcript_text, lang = await transcribe_youtube(body.video_url)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"No captions available for this video: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
 
-    # 3. Ask LLM to summarize
+    # 3. Ask LLM to summarize natively
     try:
-        summary_content = await summarize_youtube_video(transcript_text)
+        summary_content = await summarize_youtube_video(transcript_text, content_language=lang)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM summarization failed: {str(e)}")
 
     if body.annotation:
-        summary_content = f"[User Annotation]: {body.annotation}\n\n{summary_content}"
+        summary_content = f"[{lang.upper()} User Annotation]: {body.annotation}\n\n{summary_content}"
 
     # 4. Save to DB
     note = Note(
-        title=f"YouTube Video: {video_id}", # Ideal: fetch title, but ID works for now
+        title=f"YouTube Video",
         content=summary_content,
         source_url=body.video_url,
         tags=["youtube", "video"],
+        language=lang,
     )
     db.add(note)
     await db.flush()
@@ -115,6 +99,7 @@ async def create_youtube_note(
 async def list_notes(
     topic_id: uuid.UUID | None = Query(None),
     tag: str | None = Query(None),
+    language: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
@@ -125,7 +110,9 @@ async def list_notes(
     if topic_id:
         query = query.where(Note.topic_id == topic_id)
     if tag:
-        query = query.where(Note.tags.contains([tag]))
+        query = query.where((Note.auto_tags.contains([tag])) | (Note.user_tags.contains([tag])) | (Note.tags.contains([tag])))
+    if language and language != "All":
+        query = query.where(Note.language == language)
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
@@ -138,10 +125,14 @@ async def list_notes(
             title=n.title,
             summary=n.summary,
             tags=n.tags,
+            auto_tags=n.auto_tags,
+            user_tags=n.user_tags,
             topic_id=n.topic_id,
             topic_name=None,
             source_url=n.source_url,
+            language=n.language,
             is_processed=n.is_processed,
+            processed=n.processed,
             created_at=n.created_at,
         )
         if n.topic_id:
@@ -167,7 +158,7 @@ async def search_notes(
     # Search via pgvector
     result = await db.execute(
         text("""
-            SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
+            SELECT id, title, summary, tags, auto_tags, user_tags, topic_id, source_url, language, is_processed, processed, created_at,
                    1 - (embedding <=> CAST(:emb AS vector)) as similarity
             FROM notes
             WHERE embedding IS NOT NULL
@@ -181,7 +172,7 @@ async def search_notes(
     search_results = []
     contexts = []
     for row in rows:
-        note_id, title, summary, tags, topic_id, source_url, is_processed, created_at, similarity = row
+        note_id, title, summary, tags, auto_tags, user_tags, topic_id, source_url, lang, is_processed, processed, created_at, similarity = row
 
         # Get topic name
         topic_name = None
@@ -196,10 +187,14 @@ async def search_notes(
                 title=title,
                 summary=summary,
                 tags=tags or [],
+                auto_tags=auto_tags or [],
+                user_tags=user_tags or [],
                 topic_id=topic_id,
                 topic_name=topic_name,
                 source_url=source_url,
+                language=lang,
                 is_processed=is_processed,
+                processed=processed,
                 created_at=created_at,
             ),
             similarity=round(float(similarity), 4),
@@ -237,7 +232,8 @@ async def search_notes(
             print(f"RAG Agent Error: {e}")
             pass  # Gracefully degrade if LLM / Agent fails
 
-    return SearchResponse(results=search_results, rag=rag)
+    query_lang = detect_language(q)
+    return SearchResponse(results=search_results, rag=rag, query_language=query_lang)
 
 
 @router.get("/related", response_model=RelatedNotesResponse)
@@ -261,7 +257,7 @@ async def get_related_notes(
             # Use existing note's embedding to find related notes
             result = await db.execute(
                 text("""
-                    SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
+                    SELECT id, title, summary, tags, topic_id, source_url, language, is_processed, created_at,
                            1 - (embedding <=> CAST(:emb AS vector)) as similarity
                     FROM notes
                     WHERE id != :note_id AND embedding IS NOT NULL
@@ -275,9 +271,9 @@ async def get_related_notes(
                 SearchResult(
                     note=NoteListOut(
                         id=r[0], title=r[1], summary=r[2], tags=r[3] or [],
-                        topic_id=r[4], source_url=r[5], is_processed=r[6], created_at=r[7],
+                        topic_id=r[4], source_url=r[5], language=r[6], is_processed=r[7], created_at=r[8],
                     ),
-                    similarity=round(float(r[8]), 4),
+                    similarity=round(float(r[9]), 4),
                 )
                 for r in rows
             ])
@@ -288,7 +284,7 @@ async def get_related_notes(
 
     result = await db.execute(
         text("""
-            SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
+            SELECT id, title, summary, tags, topic_id, source_url, language, is_processed, created_at,
                    1 - (embedding <=> CAST(:emb AS vector)) as similarity
             FROM notes
             WHERE embedding IS NOT NULL
@@ -303,9 +299,9 @@ async def get_related_notes(
         SearchResult(
             note=NoteListOut(
                 id=r[0], title=r[1], summary=r[2], tags=r[3] or [],
-                topic_id=r[4], source_url=r[5], is_processed=r[6], created_at=r[7],
+                topic_id=r[4], source_url=r[5], language=r[6], is_processed=r[7], created_at=r[8],
             ),
-            similarity=round(float(r[8]), 4),
+            similarity=round(float(r[9]), 4),
         )
         for r in rows
     ])
@@ -348,7 +344,49 @@ async def delete_note(
     note = await db.get(Note, note_id)
     if not note:
         raise HTTPException(404, "Note not found")
+        
+    # If the note belongs to a topic, decrement the topic's note count
+    if note.topic_id:
+        topic = await db.get(Topic, note.topic_id)
+        if topic:
+            topic.note_count -= 1
+            if topic.note_count <= 0:
+                await db.delete(topic)
+                
     await db.delete(note)
+
+
+@router.patch("/{note_id}/tags", response_model=NoteOut)
+async def update_note_tags(
+    note_id: uuid.UUID,
+    body: TagUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually update a note's user_tags without affecting auto_tags."""
+    note = await db.get(Note, note_id)
+    if not note:
+        raise HTTPException(404, "Note not found")
+        
+    # Standardize tags
+    new_tags = [t.strip().lower() for t in body.tags if t.strip()]
+    note.user_tags = list(set(new_tags)) # deduplicate
+    
+    await db.commit()
+    return await _note_with_backlinks(db, note)
+
+
+@router.post("/{note_id}/suggest-tags", response_model=SuggestTagsResponse)
+async def suggest_note_tags(
+    note_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate dynamic tag suggestions for a note (does not save)."""
+    note = await db.get(Note, note_id)
+    if not note:
+        raise HTTPException(404, "Note not found")
+        
+    suggestions = await generate_tags(note.content, note.language)
+    return SuggestTagsResponse(suggested_tags=suggestions)
 
 
 # ─── Helpers ────────────────────────────────────────────────────
@@ -360,10 +398,14 @@ def _note_to_out(note: Note, backlinks: list[NoteLinkOut] | None = None) -> Note
         content=note.content,
         source_url=note.source_url,
         tags=note.tags,
+        auto_tags=note.auto_tags,
+        user_tags=note.user_tags,
         summary=note.summary,
         key_concepts=note.key_concepts,
         topic_id=note.topic_id,
+        language=note.language,
         is_processed=note.is_processed,
+        processed=note.processed,
         created_at=note.created_at,
         updated_at=note.updated_at,
         backlinks=backlinks or [],

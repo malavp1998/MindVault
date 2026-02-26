@@ -78,8 +78,15 @@ export default function SearchPage() {
             {/* RAG Answer */}
             {results?.rag && (
                 <div className="rag-answer" style={{ animation: 'fadeInUp 0.4s ease' }}>
-                    <div className="rag-answer-header">
-                        <span>✨</span> AI-Synthesized Answer
+                    <div className="rag-answer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <span>✨</span> AI-Synthesized Answer
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 'normal', opacity: 0.7 }}>
+                            {['hi', 'ta', 'te', 'kn', 'bn', 'ml', 'gu', 'mr', 'pa', 'or'].includes(results.query_language)
+                                ? "Answered by Sarvam AI 🇮🇳"
+                                : "Answered by Groq 🇬🇧"}
+                        </div>
                     </div>
                     <div className="rag-answer-text">{results.rag.answer}</div>
                 </div>
@@ -124,7 +131,8 @@ export default function SearchPage() {
                                     <span>{new Date(result.note.created_at).toLocaleDateString()}</span>
                                     <div>
                                         {result.note.topic_name && <span className="tag">{result.note.topic_name}</span>}
-                                        {result.note.source_url && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>🔗 Has source</span>}
+                                        {result.note.language && result.note.language !== 'en' && <span className="tag">🇮🇳 {result.note.language.toUpperCase()}</span>}
+                                        {result.note.source_url && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>🔗 Has source</span>}
                                     </div>
                                 </div>
                             </div>

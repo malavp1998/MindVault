@@ -13,6 +13,7 @@ class NoteCreate(BaseModel):
     content: str
     source_url: str | None = None
     tags: list[str] | None = []
+    user_tags: list[str] = []
     annotation: str | None = None
 
 
@@ -36,11 +37,15 @@ class NoteOut(BaseModel):
     content: str
     source_url: str | None = None
     tags: list[str] | None = []
+    auto_tags: list[str] = []
+    user_tags: list[str] = []
     summary: str | None = None
     key_concepts: list[str] | None = None
     topic_id: UUID | None = None
     topic_name: str | None = None
+    language: str = "en"
     is_processed: bool = False
+    processed: bool = False
     created_at: datetime
     updated_at: datetime
     backlinks: list[NoteLinkOut] = []
@@ -53,10 +58,14 @@ class NoteListOut(BaseModel):
     title: str
     summary: str | None = None
     tags: list[str] | None = []
+    auto_tags: list[str] = []
+    user_tags: list[str] = []
     topic_id: UUID | None = None
     topic_name: str | None = None
     source_url: str | None = None
+    language: str = "en"
     is_processed: bool = False
+    processed: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -67,11 +76,19 @@ class NoteListOut(BaseModel):
 class TopicOut(BaseModel):
     id: UUID
     name: str
+    cluster_id: int | None = None
     description: str | None = None
     note_count: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TagUpdate(BaseModel):
+    tags: list[str]
+
+class SuggestTagsResponse(BaseModel):
+    suggested_tags: list[str]
 
 
 # ─── Search Schemas ─────────────────────────────────────────────
@@ -89,6 +106,7 @@ class RAGResponse(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     rag: RAGResponse | None = None
+    query_language: str = "en"
 
 
 # ─── Related Notes ──────────────────────────────────────────────

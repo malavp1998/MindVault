@@ -11,7 +11,8 @@ from database import async_session
 from models import Topic
 from schemas import SearchResult, NoteListOut
 from services.embedding import get_embedding
-from services.llm import _call_llm
+from services.llm import llm_complete
+from services.language import detect_language, is_indic
 
 
 # ─── State & Schemas ────────────────────────────────────────────
@@ -59,7 +60,7 @@ async def route_node(state: AgentState) -> dict:
         "3. broad_search: a general exploratory search.\n"
         "Respond ONLY with a JSON object like: {\"category\": \"specific_note\"}"
     )
-    result = await _call_llm(prompt, f"Query: {query}")
+    result = await llm_complete(f"{prompt}\n\nQuery: {query}")
     try:
         # Try finding JSON block
         cleaned = result.strip()
@@ -152,7 +153,7 @@ async def grade_node(state: AgentState) -> dict:
         "{\"score\": 0.8, \"feedback\": \"...\", \"improved_query\": \"...\"}"
     )
     
-    result = await _call_llm(prompt, f"Query: {query}\n\nRetrieved Notes:\n{context_str}")
+    result = await llm_complete(f"{prompt}\n\nQuery: {query}\n\nRetrieved Notes:\n{context_str}")
     
     try:
         cleaned = result.strip()
@@ -185,9 +186,10 @@ def decide_to_retry(state: AgentState) -> str:
 
 
 async def synthesize_node(state: AgentState) -> dict:
-    """Generate final answer from retrieved notes."""
+    """Generate final answer from retrieved notes using the native language."""
     query = state["query"]
     notes = state["retrieved_notes"]
+    query_lang = detect_language(query)
     
     if not notes:
         answer = "I couldn't find any relevant notes in your vault for this query."
@@ -198,14 +200,31 @@ async def synthesize_node(state: AgentState) -> dict:
         for i, n in enumerate(notes)
     )
     
-    prompt = (
-        "You are a knowledgeable assistant answering questions based strictly on the user's personal notes. "
-        "Use the provided source notes below to accurately answer the question. "
-        "Cite your sources using [Source N] notation. If the sources don't contain enough information, "
-        "state exactly what you know and don't invent details."
-    )
+    if is_indic(query_lang):
+        prompt = f"""
+        Aap ek helpful assistant ho. Neeche diye gaye notes ke basis par 
+        question ka jawab do. Sirf notes ki information use karo.
+        Answer {query_lang} language mein do.
+        
+        Notes:
+        {context_block}
+        
+        Question: {query}
+        """
+    else:
+        prompt = f"""
+        You are a knowledgeable assistant answering questions based strictly on the user's personal notes. 
+        Use the provided source notes below to accurately answer the question. 
+        Cite your sources using [Source N] notation. If the sources don't contain enough information, 
+        state exactly what you know and don't invent details.
+        
+        Notes:
+        {context_block}
+        
+        Question: {query}
+        """
     
-    answer = await _call_llm(prompt, f"Question: {query}\n\nRelevant notes:\n\n{context_block}")
+    answer = await llm_complete(prompt, query_lang)
     
     return {"final_answer": answer, "sources": notes}
 

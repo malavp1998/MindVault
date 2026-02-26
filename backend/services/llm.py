@@ -1,110 +1,93 @@
 from __future__ import annotations
-"""LLM service — supports OpenAI, Ollama, and Gemini for text generation."""
+"""LLM service — fully multilingual routing via Groq and Sarvam."""
 
-import httpx
 import json
 from openai import AsyncOpenAI
 from config import get_settings
+from services.language import detect_language, is_indic
 
 settings = get_settings()
 
-_openai_client: AsyncOpenAI | None = None
+_groq_client: AsyncOpenAI | None = None
+_sarvam_client: AsyncOpenAI | None = None
 
 
-def _get_openai_client() -> AsyncOpenAI:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
-    return _openai_client
+def _get_groq_client() -> AsyncOpenAI:
+    """English / Global router client via Groq."""
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = AsyncOpenAI(
+            api_key=settings.groq_api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+    return _groq_client
 
 
-async def _call_llm(system_prompt: str, user_prompt: str) -> str:
-    """Route LLM call to OpenAI, Ollama, or Gemini."""
-    if settings.llm_provider == "ollama":
-        return await _ollama_generate(system_prompt, user_prompt)
-    if settings.llm_provider == "gemini":
-        return await _gemini_generate(system_prompt, user_prompt)
-    return await _openai_generate(system_prompt, user_prompt)
+def _get_sarvam_client() -> AsyncOpenAI:
+    """Indic router client via Sarvam AI."""
+    global _sarvam_client
+    if _sarvam_client is None:
+        _sarvam_client = AsyncOpenAI(
+            api_key=settings.sarvam_api_key,
+            base_url="https://api.sarvam.ai/v1"
+        )
+    return _sarvam_client
 
 
-async def _openai_generate(system_prompt: str, user_prompt: str) -> str:
-    client = _get_openai_client()
-    response = await client.chat.completions.create(
-        model=settings.openai_llm_model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.3,
-        max_tokens=1000,
-    )
+async def llm_complete(prompt: str, lang: str | None = None) -> str:
+    """Smart routing LLM completion based on text language."""
+    detected_lang = lang or detect_language(prompt)
+    
+    if is_indic(detected_lang):
+        # Use Sarvam for Indic languages
+        client = _get_sarvam_client()
+        response = await client.chat.completions.create(
+            model="sarvam-2b",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
+        )
+    else:
+        # Use Groq for English and others
+        client = _get_groq_client()
+        response = await client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000
+        )
+    
     return response.choices[0].message.content.strip()
 
 
-async def _gemini_generate(system_prompt: str, user_prompt: str) -> str:
-    """Generate text via Gemini REST API v1beta."""
-    model = settings.gemini_llm_model  # e.g. "gemini-2.5-flash" or "gemma-3-27b-it"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
-    if "gemma" in model.lower():
-        # Gemma models on the Gemini API don't support the system_instruction field.
-        combined_prompt = f"System Instruction:\n{system_prompt}\n\nUser Request:\n{user_prompt}"
-        payload = {
-            "contents": [{"role": "user", "parts": [{"text": combined_prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000},
-        }
+async def generate_summary(content: str, content_language: str | None = None) -> str:
+    """Generate a precise 3-sentence summary relying on smart routing."""
+    lang = content_language or detect_language(content)
+    
+    if is_indic(lang):
+        summary_prompt = f"""
+        Is content ka summary do same language mein:
+        1. 3 sentence ka TL;DR
+        2. Key concepts (bullet points)
+        3. Important insights
+        
+        Content: {content[:4000]}
+        """
     else:
-        # Gemini uses system_instruction as a separate top-level field
-        payload = {
-            "system_instruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000},
-        }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            url,
-            params={"key": settings.gemini_api_key},
-            json=payload,
-            timeout=60.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-
-
-async def _ollama_generate(system_prompt: str, user_prompt: str) -> str:
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{settings.ollama_base_url}/api/chat",
-            json={
-                "model": settings.ollama_llm_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "stream": False,
-            },
-            timeout=120.0,
-        )
-        response.raise_for_status()
-        return response.json()["message"]["content"].strip()
-
-
-async def generate_summary(content: str) -> str:
-    """Generate a concise 3-sentence summary of the content."""
-    return await _call_llm(
-        system_prompt="You are a precise summarizer. Generate exactly 3 sentences that capture the key points of the given text. Be concise and informative.",
-        user_prompt=f"Summarize the following text in exactly 3 sentences:\n\n{content[:4000]}",
-    )
+        summary_prompt = f"""
+        Summarize this content:
+        1. 3-sentence TL;DR
+        2. Key concepts (bullet points)  
+        3. Actionable insights
+        
+        Content: {content[:4000]}
+        """
+        
+    return await llm_complete(summary_prompt, lang)
 
 
 async def extract_concepts(content: str) -> list[str]:
     """Extract key concepts and entities from the content."""
-    result = await _call_llm(
-        system_prompt="You are an entity extraction system. Extract key concepts, entities, and important terms from the given text. Return them as a JSON array of strings. Return ONLY the JSON array, no other text.",
-        user_prompt=f"Extract key concepts from:\n\n{content[:4000]}",
-    )
+    prompt = f"You are an entity extraction system. Extract key concepts, entities, and important terms from the given text. Return them as a JSON array of strings. Return ONLY the JSON array, no other text.\n\nExtract key concepts from:\n\n{content[:4000]}"
+    result = await llm_complete(prompt)
     try:
         cleaned = result.strip()
         if cleaned.startswith("```"):
@@ -117,27 +100,61 @@ async def extract_concepts(content: str) -> list[str]:
 
 async def synthesize_answer(query: str, contexts: list[str]) -> str:
     """RAG: Generate a synthesized answer from retrieved contexts."""
-    context_block = "\n\n---\n\n".join(
-        f"[Source {i+1}]:\n{ctx}" for i, ctx in enumerate(contexts)
-    )
-    return await _call_llm(
-        system_prompt="You are a knowledgeable assistant answering questions based on the user's personal notes. Use the provided source notes to answer the question accurately. Cite sources using [Source N] notation. If the sources don't contain relevant information, say so.",
-        user_prompt=f"Question: {query}\n\nRelevant notes from vault:\n\n{context_block}",
-    )
+    lang = detect_language(query)
+    context_block = "\n\n".join(contexts)
+    
+    if is_indic(lang):
+        prompt = f"""
+        Sirf neeche diye notes ke basis par answer do.
+        Answer same language mein do jisme question hai.
+        
+        Notes:
+        {context_block}
+        
+        Question: {query}
+        """
+    else:
+        prompt = f"""
+        Answer using ONLY the context from the notes below.
+        
+        Notes:
+        {context_block}
+        
+        Question: {query}
+        """
+    
+    return await llm_complete(prompt, lang)
 
 
 async def generate_topic_name(contents: list[str]) -> str:
     """Generate a descriptive name for a topic cluster given sample contents."""
     samples = "\n---\n".join(c[:500] for c in contents[:5])
-    return await _call_llm(
-        system_prompt="You are a topic naming system. Given a set of related text excerpts, generate a short, descriptive topic name (2-5 words). Return ONLY the topic name, nothing else.",
-        user_prompt=f"Generate a topic name for these related texts:\n\n{samples}",
-    )
+    prompt = f"You are a topic naming system. Given a set of related text excerpts, generate a short, descriptive topic name (2-5 words). Return ONLY the topic name, nothing else.\n\nGenerate a topic name for these related texts:\n\n{samples}"
+    return await llm_complete(prompt)
 
 
-async def summarize_youtube_video(transcript: str) -> str:
-    """Summarize a YouTube video transcript into structured points."""
-    return await _call_llm(
-        system_prompt="You are an expert video summarizer. Produce a highly structured and concise summary of the provided video transcript.",
-        user_prompt=f"Summarize this YouTube video transcript into:\n1. A 3-sentence TL;DR\n2. Key concepts learned (bullet points)\n3. Any actionable insights\n\nTranscript:\n{transcript[:50000]}",
-    )
+async def summarize_youtube_video(transcript: str, content_language: str | None = None) -> str:
+    """Summarize a YouTube video transcript into structured points natively in the requested language."""
+    lang = content_language or detect_language(transcript)
+    if is_indic(lang):
+        prompt = f"""
+        Neeche diye gaye YouTube video transcript ka summary do (same language mein):
+        1. 3 sentence ka TL;DR
+        2. Key concepts learned (bullet points)
+        3. Koi bhi actionable insights
+
+        Transcript:
+        {transcript[:50000]}
+        """
+    else:
+        prompt = f"""
+        Summarize this YouTube video transcript into:
+        1. A 3-sentence TL;DR
+        2. Key concepts learned (bullet points)
+        3. Any actionable insights
+
+        Transcript:
+        {transcript[:50000]}
+        """
+    
+    return await llm_complete(prompt, lang)

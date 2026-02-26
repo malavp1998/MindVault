@@ -1,12 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getNote, processNote } from '../api';
+import { getNote, processNote, deleteNote, api } from '../api';
 
 export default function NotePage() {
     const { id } = useParams();
     const [note, setNote] = useState(null);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // Tag management state
+    const [showTagInput, setShowTagInput] = useState(false);
+    const [newTag, setNewTag] = useState('');
+    const [suggestingTags, setSuggestingTags] = useState(false);
+    const [suggestedTags, setSuggestedTags] = useState([]);
+
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -35,6 +43,77 @@ export default function NotePage() {
             console.error('Processing failed:', err);
         } finally {
             setProcessing(false);
+        }
+    }
+
+    async function handleDelete() {
+        if (!window.confirm("Are you sure you want to delete this note? This cannot be undone.")) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            await deleteNote(id);
+            navigate('/', { replace: true });
+        } catch (err) {
+            console.error('Failed to delete note:', err);
+            alert("Failed to delete note. Please try again.");
+            setIsDeleting(false);
+        }
+    }
+
+    // --- Tagging handlers ---
+    async function handleAddTag(e) {
+        if (e.key === 'Enter' && newTag.trim()) {
+            const tag = newTag.trim().toLowerCase();
+            const currentTags = note.user_tags || [];
+            if (!currentTags.includes(tag)) {
+                try {
+                    const updatedNote = await api.patch(`/notes/${id}/tags`, { tags: [...currentTags, tag] }).then(r => r.data);
+                    setNote(updatedNote);
+                } catch (err) {
+                    console.error("Failed to add tag", err);
+                }
+            }
+            setNewTag('');
+            setShowTagInput(false);
+        }
+    }
+
+    async function handleRemoveTag(tagToRemove) {
+        const currentTags = note.user_tags || [];
+        const newTags = currentTags.filter(t => t !== tagToRemove);
+        try {
+            const updatedNote = await api.patch(`/notes/${id}/tags`, { tags: newTags }).then(r => r.data);
+            setNote(updatedNote);
+        } catch (err) {
+            console.error("Failed to remove tag", err);
+        }
+    }
+
+    async function handleSuggestTags() {
+        setSuggestingTags(true);
+        try {
+            const res = await api.post(`/notes/${id}/suggest-tags`).then(r => r.data);
+            setSuggestedTags(res.suggested_tags || []);
+        } catch (err) {
+            console.error("Failed to suggest tags", err);
+        } finally {
+            setSuggestingTags(false);
+        }
+    }
+
+    async function acceptSuggestedTag(tag) {
+        const currentTags = note.user_tags || [];
+        if (!currentTags.includes(tag)) {
+            try {
+                const updatedNote = await api.patch(`/notes/${id}/tags`, { tags: [...currentTags, tag] }).then(r => r.data);
+                setNote(updatedNote);
+                // Remove from suggestions array safely
+                setSuggestedTags(prev => prev.filter(t => t !== tag));
+            } catch (err) {
+                console.error("Failed to accept suggested tag", err);
+            }
         }
     }
 
@@ -93,17 +172,114 @@ export default function NotePage() {
                     >
                         {processing ? '⏳ Processing...' : '🔄 Reprocess'}
                     </button>
+                    <button
+                        onClick={handleDelete}
+                        disabled={isDeleting}
+                        style={{
+                            background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.5)',
+                            color: '#ef4444', padding: '4px 12px', borderRadius: 6,
+                            marginLeft: 8, fontSize: 12, cursor: 'pointer',
+                        }}
+                    >
+                        {isDeleting ? '⏳ Deleting...' : '🗑️ Delete'}
+                    </button>
                 </div>
             </div>
 
-            {/* Tags */}
-            {note.tags && note.tags.length > 0 && (
-                <div style={{ marginBottom: 24 }}>
-                    {note.tags.map(tag => (
-                        <span key={tag} className="tag">{tag}</span>
-                    ))}
+            {/* Tags Area */}
+            <div style={{ marginBottom: 24, padding: '16px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+
+                {/* Auto Tags (AI Generated) */}
+                <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 500 }}>✨ AI Generated Tags</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {Array.isArray(note.auto_tags) && note.auto_tags.length > 0 ? (
+                            note.auto_tags.map(tag => (
+                                <span key={`auto-${tag}`} className="tag" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.3)' }}>
+                                    {tag}
+                                </span>
+                            ))
+                        ) : (
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tags generated yet.</span>
+                        )}
+                    </div>
                 </div>
-            )}
+
+                {/* User Tags (Manual) */}
+                <div>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>🏷️ Custom Tags</span>
+                        <div>
+                            <button
+                                onClick={() => setShowTagInput(!showTagInput)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, marginRight: 12 }}
+                            >
+                                + Add Tag
+                            </button>
+                            <button
+                                onClick={handleSuggestTags}
+                                disabled={suggestingTags}
+                                style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 12 }}
+                            >
+                                {suggestingTags ? '⏳ Thinking...' : '🪄 Suggest'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                        {Array.isArray(note.user_tags) && note.user_tags.map(tag => (
+                            <span key={`user-${tag}`} className="tag" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {tag}
+                                <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', color: '#34d399', cursor: 'pointer', padding: 0, fontSize: 12, opacity: 0.7 }}>×</button>
+                            </span>
+                        ))}
+
+                        {/* Legacy tags fallback */}
+                        {Array.isArray(note.tags) && note.tags.length > 0 && (!note.auto_tags || note.auto_tags.length === 0) && (!note.user_tags || note.user_tags.length === 0) && (
+                            note.tags.map(tag => (
+                                <span key={`legacy-${tag}`} className="tag">{tag}</span>
+                            ))
+                        )}
+
+                        {showTagInput && (
+                            <input
+                                autoFocus
+                                type="text"
+                                value={newTag}
+                                onChange={e => setNewTag(e.target.value)}
+                                onKeyDown={handleAddTag}
+                                onBlur={() => setShowTagInput(false)}
+                                placeholder="Type and press Enter..."
+                                style={{
+                                    background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                                    padding: '4px 8px', borderRadius: '6px', fontSize: 13, outline: 'none', width: 140
+                                }}
+                            />
+                        )}
+                    </div>
+
+                    {/* Pending Suggestions */}
+                    {suggestedTags.length > 0 && (
+                        <div style={{ marginTop: 12, padding: 12, background: 'rgba(59, 130, 246, 0.05)', borderRadius: 8, border: '1px dashed rgba(59, 130, 246, 0.2)' }}>
+                            <div style={{ fontSize: 12, color: '#60a5fa', marginBottom: 8 }}>Suggested by AI (Click to accept):</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                {suggestedTags.map(tag => (
+                                    <button
+                                        key={`suggested-${tag}`}
+                                        onClick={() => acceptSuggestedTag(tag)}
+                                        className="tag"
+                                        style={{ background: 'transparent', color: 'var(--text-primary)', borderColor: 'var(--border-color)', cursor: 'pointer', transition: 'all 0.2s' }}
+                                        onMouseOver={e => e.currentTarget.style.borderColor = '#60a5fa'}
+                                        onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                                    >
+                                        + {tag}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {/* AI Summary */}
             {note.summary && (
@@ -114,7 +290,7 @@ export default function NotePage() {
             )}
 
             {/* Key Concepts */}
-            {note.key_concepts && note.key_concepts.length > 0 && (
+            {Array.isArray(note.key_concepts) && note.key_concepts.length > 0 && (
                 <div className="note-section">
                     <h3 className="note-section-title">🔑 Key Concepts</h3>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -123,7 +299,8 @@ export default function NotePage() {
                         ))}
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* Content */}
             <div className="note-section">
@@ -132,21 +309,23 @@ export default function NotePage() {
             </div>
 
             {/* Backlinks */}
-            {note.backlinks && note.backlinks.length > 0 && (
-                <div className="note-section">
-                    <h3 className="note-section-title">🔗 Linked Notes ({note.backlinks.length})</h3>
-                    {note.backlinks.map(link => (
-                        <div
-                            key={link.id}
-                            className="backlink-card"
-                            onClick={() => navigate(`/note/${link.note_id}`)}
-                        >
-                            <span style={{ fontWeight: 500, fontSize: 14 }}>{link.title}</span>
-                            <span className="similarity-badge">{(link.similarity_score * 100).toFixed(0)}% match</span>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
+            {
+                note.backlinks && note.backlinks.length > 0 && (
+                    <div className="note-section">
+                        <h3 className="note-section-title">🔗 Linked Notes ({note.backlinks.length})</h3>
+                        {note.backlinks.map(link => (
+                            <div
+                                key={link.id}
+                                className="backlink-card"
+                                onClick={() => navigate(`/note/${link.note_id}`)}
+                            >
+                                <span style={{ fontWeight: 500, fontSize: 14 }}>{link.title}</span>
+                                <span className="similarity-badge">{(link.similarity_score * 100).toFixed(0)}% match</span>
+                            </div>
+                        ))}
+                    </div>
+                )
+            }
+        </div >
     );
 }

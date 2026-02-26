@@ -10,6 +10,8 @@ from database import get_db
 from models import Topic, Note
 from schemas import TopicOut
 from services.llm import synthesize_answer
+from services.clustering import cluster_notes
+import asyncio
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 
@@ -23,6 +25,7 @@ async def list_topics(db: AsyncSession = Depends(get_db)):
         TopicOut(
             id=t.id,
             name=t.name,
+            cluster_id=t.cluster_id,
             description=t.description,
             note_count=t.note_count,
             created_at=t.created_at,
@@ -40,6 +43,7 @@ async def get_topic(topic_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     return TopicOut(
         id=topic.id,
         name=topic.name,
+        cluster_id=topic.cluster_id,
         description=topic.description,
         note_count=topic.note_count,
         created_at=topic.created_at,
@@ -73,3 +77,10 @@ async def summarize_topic(topic_id: uuid.UUID, db: AsyncSession = Depends(get_db
     await db.flush()
 
     return {"topic_id": str(topic_id), "name": topic.name, "summary": summary}
+
+
+@router.post("/recluster", status_code=202)
+async def trigger_recluster():
+    """Manually trigger background KMeans re-clustering."""
+    asyncio.create_task(cluster_notes())
+    return {"message": "Re-clustering started in the background"}

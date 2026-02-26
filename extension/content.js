@@ -288,16 +288,38 @@
 
   function renderNotes(notes) {
     const list = document.getElementById('mv-notes-list');
-    list.innerHTML = notes.map(item => `
+    list.innerHTML = notes.map(item => {
+      let tagsHtml = '';
+
+      if (item.note.auto_tags && item.note.auto_tags.length > 0) {
+        tagsHtml += item.note.auto_tags.slice(0, 3).map(t =>
+          `<span class="mv-tag mv-auto-tag">✨ ${escapeHtml(t)}</span>`
+        ).join('');
+      }
+
+      if (item.note.user_tags && item.note.user_tags.length > 0) {
+        tagsHtml += item.note.user_tags.slice(0, 3).map(t =>
+          `<span class="mv-tag mv-user-tag">🏷️ ${escapeHtml(t)}</span>`
+        ).join('');
+      } else if (item.note.tags && item.note.tags.length > 0 && (!item.note.auto_tags || item.note.auto_tags.length === 0)) {
+        // Fallback for legacy tags
+        tagsHtml += item.note.tags.slice(0, 3).map(t =>
+          `<span class="mv-tag">${escapeHtml(t)}</span>`
+        ).join('');
+      }
+
+      return `
       <div class="mv-note-card" onclick="window.open('http://localhost:5173/note/${item.note.id}', '_blank')">
         <div class="mv-note-card-title">${escapeHtml(item.note.title)}</div>
+        ${tagsHtml ? `<div class="mv-note-card-tags">${tagsHtml}</div>` : ''}
         ${item.note.summary ? `<div class="mv-note-card-summary">${escapeHtml(item.note.summary)}</div>` : ''}
         <div class="mv-note-card-meta">
           <span>${new Date(item.note.created_at).toLocaleDateString()}</span>
           <span class="mv-similarity-badge">${(item.similarity * 100).toFixed(0)}% match</span>
         </div>
       </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function escapeHtml(str) {

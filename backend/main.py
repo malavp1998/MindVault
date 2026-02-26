@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import init_db
 from routes.notes import router as notes_router
 from routes.topics import router as topics_router
+from routes.graph import router as graph_router
 from mcp_server import mcp
 
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +45,7 @@ app.add_middleware(
 # REST API routes
 app.include_router(notes_router, prefix="/api")
 app.include_router(topics_router, prefix="/api")
+app.include_router(graph_router, prefix="/api")
 
 # MCP server mount
 app.mount("/mcp", mcp.streamable_http_app())

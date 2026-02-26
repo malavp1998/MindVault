@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, Float, ForeignKey, Integer, JSON
+from sqlalchemy import String, Text, DateTime, Float, ForeignKey, Integer, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from pgvector.sqlalchemy import Vector
 from database import Base
 
@@ -19,9 +19,13 @@ class Note(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    tags: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
+    tags: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list) # Legacy, optionally remove later
+    auto_tags: Mapped[list[str]] = mapped_column(ARRAY(String), server_default="{}")
+    user_tags: Mapped[list[str]] = mapped_column(ARRAY(String), server_default="{}")
+    processed: Mapped[bool] = mapped_column(Boolean, server_default="false")
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_concepts: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    language: Mapped[str] = mapped_column(String(10), default="en")
     topic_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("topics.id"), nullable=True
     )
@@ -53,6 +57,7 @@ class Topic(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cluster_id: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     centroid = mapped_column(Vector(1536), nullable=True)
     note_count: Mapped[int] = mapped_column(Integer, default=0)

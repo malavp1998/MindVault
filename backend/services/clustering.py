@@ -1,128 +1,162 @@
 from __future__ import annotations
-"""Clustering service — topic auto-assignment and re-clustering."""
+"""Service for grouping vector embeddings into topics using KMeans clustering."""
 
+import logging
 import uuid
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 import numpy as np
-from sqlalchemy import select, func
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sklearn.cluster import AgglomerativeClustering
 
 from models import Note, Topic
 from services.llm import generate_topic_name
-from config import get_settings
+from database import async_session
 
-settings = get_settings()
-
-
-async def assign_topic(db: AsyncSession, note_id: uuid.UUID, embedding: list[float]) -> uuid.UUID | None:
-    """Assign a note to the nearest topic cluster, or create a new one."""
-    # Get all existing topics with centroids
-    result = await db.execute(select(Topic).where(Topic.centroid.isnot(None)))
-    topics = result.scalars().all()
-
-    if not topics:
-        # No topics yet — check if we have enough notes to cluster
-        count_result = await db.execute(
-            select(func.count(Note.id)).where(Note.embedding.isnot(None))
-        )
-        note_count = count_result.scalar()
-        if note_count >= settings.recluster_every_n:
-            await recluster_all(db)
-            # Re-fetch topics after clustering
-            result = await db.execute(select(Topic).where(Topic.centroid.isnot(None)))
-            topics = result.scalars().all()
-        if not topics:
-            return None
-
-    # Find nearest topic by cosine similarity
-    emb_array = np.array(embedding)
-    best_topic = None
-    best_sim = -1.0
-
-    for topic in topics:
-        if topic.centroid is not None:
-            centroid = np.array(topic.centroid)
-            sim = np.dot(emb_array, centroid) / (
-                np.linalg.norm(emb_array) * np.linalg.norm(centroid) + 1e-10
-            )
-            if sim > best_sim:
-                best_sim = sim
-                best_topic = topic
-
-    # Only assign if similarity is above threshold
-    if best_topic and best_sim > 0.3:
-        best_topic.note_count += 1
-        return best_topic.id
-
-    return None
+logger = logging.getLogger(__name__)
 
 
-async def recluster_all(db: AsyncSession) -> list[Topic]:
-    """Re-cluster all notes using Agglomerative Clustering."""
-    # Fetch all notes with embeddings
-    result = await db.execute(
-        select(Note.id, Note.embedding, Note.content)
-        .where(Note.embedding.isnot(None))
+async def _generate_topic_name_local(sample_contents: list[str]) -> str:
+    """Generate a short descriptive topic name via LLM."""
+    from services.llm import llm_complete
+    combined = "\n---\n".join(sample_contents[:5])
+    prompt = (
+        "You are a topic naming system. Given a set of related text excerpts, "
+        "generate a short descriptive topic name (2-5 words). "
+        "Return ONLY the topic name, nothing else.\n\n"
+        f"Texts:\n{combined[:2000]}"
     )
-    rows = result.all()
+    return await llm_complete(prompt)
 
-    if len(rows) < 3:
-        return []
 
-    note_ids = [r[0] for r in rows]
-    embeddings = np.array([list(r[1]) for r in rows])
-    contents = [r[2] for r in rows]
+async def find_optimal_clusters(embeddings: list[list[float]]) -> int:
+    """Automatically find best number of clusters (k) using Silhouette Score."""
+    n = len(embeddings)
+    if n < 3:
+        return 1  # 1 cluster for tiny sets
 
-    # Determine number of clusters (heuristic: sqrt of note count, min 2, max 20)
-    n_clusters = max(2, min(20, int(np.sqrt(len(rows)))))
+    max_k = min(5, n - 1)
+    best_k = 2
+    best_score = -1.0
 
-    # Run agglomerative clustering
-    clustering = AgglomerativeClustering(
-        n_clusters=n_clusters,
-        metric="cosine",
-        linkage="average",
-    )
-    labels = clustering.fit_predict(embeddings)
+    X = np.array(embeddings)
 
-    # Delete existing topics (and their FK references on notes via topic_id nullable)
-    old_topics = (await db.execute(select(Topic))).scalars().all()
-    for t in old_topics:
-        await db.delete(t)
-    await db.flush()
+    for k in range(2, max_k + 1):
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels = kmeans.fit_predict(X)
+        score = silhouette_score(X, labels)
+        if score > best_score:
+            best_score = score
+            best_k = k
 
-    # Create new topics
-    new_topics = []
-    for cluster_id in range(n_clusters):
-        mask = labels == cluster_id
-        cluster_embeddings = embeddings[mask]
-        cluster_contents = [contents[i] for i, m in enumerate(mask) if m]
-        cluster_note_ids = [note_ids[i] for i, m in enumerate(mask) if m]
+    return best_k
 
-        if len(cluster_embeddings) == 0:
-            continue
 
-        centroid = cluster_embeddings.mean(axis=0).tolist()
-
-        # Generate topic name from cluster contents
+async def cluster_notes() -> None:
+    """
+    Fetch all embeddings from DB and dynamically re-cluster using KMeans.
+    Run as a background task after every new note is processed.
+    """
+    async with async_session() as db:
         try:
-            name = await generate_topic_name(cluster_contents)
-        except Exception:
-            name = f"Topic {cluster_id + 1}"
+            # 1. Fetch all notes that have embeddings
+            result = await db.execute(
+                select(Note).where(Note.embedding.isnot(None))
+            )
+            notes_db = result.scalars().all()
 
-        topic = Topic(
-            name=name,
-            centroid=centroid,
-            note_count=len(cluster_note_ids),
-        )
-        db.add(topic)
-        await db.flush()
-        new_topics.append(topic)
+            if len(notes_db) < 1:
+                logger.info("Skipping clustering (zero notes with embeddings found).")
+                return
 
-        # Assign notes to this topic
-        for nid in cluster_note_ids:
-            note = await db.get(Note, nid)
-            if note:
-                note.topic_id = topic.id
+            # 2. Build embedding matrix
+            embeddings = []
+            note_ids = []
+            contents = []
+            for n in notes_db:
+                embeddings.append(list(n.embedding))
+                note_ids.append(n.id)
+                contents.append((n.content or "")[:300])
 
-    await db.flush()
-    return new_topics
+            X = np.array(embeddings)
+
+            # 3. Find optimal K via Silhouette Score
+            k = await find_optimal_clusters(embeddings)
+            logger.info(f"Re-clustering {len(notes_db)} notes into {k} topics.")
+
+            # 4. Fit KMeans
+            if k == 1:
+                labels = [0] * len(notes_db)
+            else:
+                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+                labels = kmeans.fit_predict(X)
+
+            active_cluster_ids: set[int] = set()
+
+            # 5. For every cluster, upsert a Topic record via ORM
+            for cluster_id in range(k):
+                cluster_note_ids = [
+                    note_ids[i] for i, lbl in enumerate(labels) if lbl == cluster_id
+                ]
+                cluster_contents = [
+                    contents[i] for i, lbl in enumerate(labels) if lbl == cluster_id
+                ]
+
+                if not cluster_note_ids:
+                    continue
+
+                active_cluster_ids.add(cluster_id)
+
+                # Ask LLM to name the cluster
+                topic_name = await _generate_topic_name_local(cluster_contents)
+                topic_name = topic_name.strip()[:100]
+
+                # Upsert Topic via ORM (no raw SQL)
+                existing_res = await db.execute(
+                    select(Topic).where(Topic.cluster_id == cluster_id)
+                )
+                topic = existing_res.scalar_one_or_none()
+
+                if topic is None:
+                    topic = Topic(
+                        name=topic_name,
+                        cluster_id=cluster_id,
+                        note_count=len(cluster_note_ids),
+                    )
+                    db.add(topic)
+                else:
+                    topic.name = topic_name
+                    topic.note_count = len(cluster_note_ids)
+
+                await db.flush()  # assign topic.id if new
+
+                # Update notes to point to this topic
+                await db.execute(
+                    text(
+                        "UPDATE notes SET topic_id = :t_id WHERE id = ANY(:n_ids)"
+                    ),
+                    {
+                        "t_id": str(topic.id),
+                        "n_ids": [str(nid) for nid in cluster_note_ids],
+                    },
+                )
+
+            # 6. Remove stale topics (orphaned by shrinking K)
+            if active_cluster_ids:
+                await db.execute(
+                    text(
+                        "DELETE FROM topics "
+                        "WHERE cluster_id IS NOT NULL "
+                        "AND cluster_id != ALL(:ids)"
+                    ),
+                    {"ids": list(active_cluster_ids)},
+                )
+
+            await db.commit()
+            logger.info(
+                f"✅ Successfully clustered {len(notes_db)} notes into {k} topics."
+            )
+
+        except Exception as exc:
+            logger.error(f"Background clustering failed: {exc}", exc_info=True)
+            await db.rollback()
