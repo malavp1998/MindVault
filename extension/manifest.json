@@ -1,0 +1,37 @@
+{
+    "manifest_version": 3,
+    "name": "MindVault",
+    "version": "1.0.0",
+    "description": "AI-powered knowledge management — save and discover knowledge from any webpage",
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "host_permissions": [
+        "http://localhost:8000/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "lib/Readability.js",
+                "content.js"
+            ],
+            "css": [
+                "sidebar.css"
+            ]
+        }
+    ],
+    "icons": {
+        "48": "icons/icon48.svg",
+        "128": "icons/icon128.svg"
+    },
+    "action": {
+        "default_title": "Toggle MindVault"
+    }
+}
