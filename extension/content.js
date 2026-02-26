@@ -53,6 +53,10 @@
             💾 Save to Vault
           </button>
 
+          <button class="mv-save-btn" id="mv-youtube-btn" style="display:none; margin-top: 10px; background-color: #cc0000;">
+            📹 Summarize Video
+          </button>
+
           <div id="mv-status" style="display:none;"></div>
         </div>
 
@@ -111,8 +115,18 @@
 
     if (isOpen) {
       extractContent();
+      // Handle navigation changes in SPAs like YouTube
+      pageUrl = window.location.href;
       document.getElementById('mv-page-title').textContent = pageTitle;
       document.getElementById('mv-page-url').textContent = pageUrl;
+
+      const isYouTubeWatch = pageUrl.includes('youtube.com/watch');
+      const ytBtn = document.getElementById('mv-youtube-btn');
+      if (isYouTubeWatch) {
+        ytBtn.style.display = 'block';
+      } else {
+        ytBtn.style.display = 'none';
+      }
     }
   }
 
@@ -189,6 +203,43 @@
       btn.textContent = '💾 Save to Vault';
       btn.disabled = false;
     }
+  });
+
+  // ─── YouTube Summarize ─────────────────────────────────────────
+  document.getElementById('mv-youtube-btn').addEventListener('click', () => {
+    const btn = document.getElementById('mv-youtube-btn');
+    const status = document.getElementById('mv-status');
+    const annotation = document.getElementById('mv-annotation').value;
+
+    // Update local variable just in case
+    pageUrl = window.location.href;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Fetching Transcript & Summarizing...';
+
+    // Send to background.js to bypass content script CORS/restrictions if any
+    chrome.runtime.sendMessage(
+      { action: 'summarize_youtube', data: { video_url: pageUrl, annotation: annotation || null } },
+      (response) => {
+        if (!response || !response.success) {
+          status.className = 'mv-status error';
+          status.textContent = `❌ Failed: ${response ? response.error : 'Unknown error'}`;
+          status.style.display = 'block';
+          btn.textContent = '📹 Summarize Video';
+          btn.disabled = false;
+        } else {
+          status.className = 'mv-status success';
+          status.textContent = '✅ Saved to vault! AI processing started.';
+          status.style.display = 'block';
+
+          btn.textContent = '✅ Saved!';
+          setTimeout(() => {
+            btn.textContent = '📹 Summarize Video';
+            btn.disabled = false;
+          }, 3000);
+        }
+      }
+    );
   });
 
   // ─── Load Related Notes ──────────────────────────────────────

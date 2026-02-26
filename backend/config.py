@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Gemini
     gemini_api_key: str = ""
     gemini_embedding_model: str = "gemini-embedding-001"
-    gemini_llm_model: str = "gemini-2.5-flash"
+    gemini_llm_model: str = "gemma-3-27b-it"
 
     # App
     backend_url: str = "http://localhost:8000"

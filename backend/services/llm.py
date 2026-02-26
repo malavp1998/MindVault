@@ -42,16 +42,24 @@ async def _openai_generate(system_prompt: str, user_prompt: str) -> str:
 
 
 async def _gemini_generate(system_prompt: str, user_prompt: str) -> str:
-    """Generate text via Gemini REST API v1beta (gemini-2.5-flash)."""
-    model = settings.gemini_llm_model  # e.g. "gemini-2.5-flash"
+    """Generate text via Gemini REST API v1beta."""
+    model = settings.gemini_llm_model  # e.g. "gemini-2.5-flash" or "gemma-3-27b-it"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-    # Gemini uses system_instruction as a separate top-level field
-    payload = {
-        "system_instruction": {"parts": [{"text": system_prompt}]},
-        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000},
-    }
+    if "gemma" in model.lower():
+        # Gemma models on the Gemini API don't support the system_instruction field.
+        combined_prompt = f"System Instruction:\n{system_prompt}\n\nUser Request:\n{user_prompt}"
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": combined_prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000},
+        }
+    else:
+        # Gemini uses system_instruction as a separate top-level field
+        payload = {
+            "system_instruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1000},
+        }
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -124,4 +132,12 @@ async def generate_topic_name(contents: list[str]) -> str:
     return await _call_llm(
         system_prompt="You are a topic naming system. Given a set of related text excerpts, generate a short, descriptive topic name (2-5 words). Return ONLY the topic name, nothing else.",
         user_prompt=f"Generate a topic name for these related texts:\n\n{samples}",
+    )
+
+
+async def summarize_youtube_video(transcript: str) -> str:
+    """Summarize a YouTube video transcript into structured points."""
+    return await _call_llm(
+        system_prompt="You are an expert video summarizer. Produce a highly structured and concise summary of the provided video transcript.",
+        user_prompt=f"Summarize this YouTube video transcript into:\n1. A 3-sentence TL;DR\n2. Key concepts learned (bullet points)\n3. Any actionable insights\n\nTranscript:\n{transcript[:50000]}",
     )

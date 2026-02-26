@@ -16,6 +16,11 @@ class NoteCreate(BaseModel):
     annotation: str | None = None
 
 
+class NoteYoutubeCreate(BaseModel):
+    video_url: str = Field(..., description="The URL of the YouTube video")
+    annotation: str | None = None
+
+
 class NoteLinkOut(BaseModel):
     id: UUID
     note_id: UUID

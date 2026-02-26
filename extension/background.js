@@ -30,6 +30,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
     }
+
+    if (message.action === 'summarize_youtube') {
+        summarizeYouTube(message.data)
+            .then(result => sendResponse({ success: true, data: result }))
+            .catch(err => sendResponse({ success: false, error: err.message }));
+        return true;
+    }
 });
 
 async function saveNote(data) {
@@ -50,5 +57,19 @@ async function getRelatedNotes(url, content) {
 
     const response = await fetch(`${API_BASE}/notes/related?${params}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
+async function summarizeYouTube(data) {
+    const response = await fetch(`${API_BASE}/notes/youtube`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+    }
     return response.json();
 }

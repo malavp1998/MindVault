@@ -13,11 +13,13 @@ from models import Note, NoteLink, Topic
 from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
-    RelatedNotesResponse,
+    RelatedNotesResponse, NoteYoutubeCreate
 )
 from services.embedding import get_embedding
-from services.llm import synthesize_answer
+from services.llm import synthesize_answer, summarize_youtube_video
 from services.pipeline import process_note
+from youtube_transcript_api import YouTubeTranscriptApi
+import urllib.parse
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -44,6 +46,65 @@ async def create_note(
     await db.refresh(note)
 
     # Trigger async processing
+    background_tasks.add_task(process_note, note.id)
+
+    return _note_to_out(note)
+
+
+@router.post("/youtube", response_model=NoteOut, status_code=201)
+async def create_youtube_note(
+    body: NoteYoutubeCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch YouTube transcript, summarize via LLM, and save as a new note."""
+    # 1. Extract video ID
+    try:
+        parsed_url = urllib.parse.urlparse(body.video_url)
+        video_id = None
+        if "youtube.com" in parsed_url.netloc:
+            qs = urllib.parse.parse_qs(parsed_url.query)
+            video_id = qs.get("v", [None])[0]
+        elif "youtu.be" in parsed_url.netloc:
+            video_id = parsed_url.path.lstrip("/")
+        
+        if not video_id:
+            raise ValueError("No video ID in URL")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
+    # 2. Fetch transcript
+    try:
+        # get_transcript returns a list of dictionaries with 'text'
+        ytt_api = YouTubeTranscriptApi()
+        transcript_list = ytt_api.list(video_id)
+        transcript = transcript_list.find_transcript(["en"])
+        transcript_data = transcript.fetch()
+        transcript_text = " ".join([t.text for t in transcript_data])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"No captions available for this video: {str(e)}")
+
+    # 3. Ask LLM to summarize
+    try:
+        summary_content = await summarize_youtube_video(transcript_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM summarization failed: {str(e)}")
+
+    if body.annotation:
+        summary_content = f"[User Annotation]: {body.annotation}\n\n{summary_content}"
+
+    # 4. Save to DB
+    note = Note(
+        title=f"YouTube Video: {video_id}", # Ideal: fetch title, but ID works for now
+        content=summary_content,
+        source_url=body.video_url,
+        tags=["youtube", "video"],
+    )
+    db.add(note)
+    await db.flush()
+    await db.refresh(note)
+
+    # 5. Trigger standard AI async embedding / linking pipeline
     background_tasks.add_task(process_note, note.id)
 
     return _note_to_out(note)

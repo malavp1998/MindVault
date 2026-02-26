@@ -82,7 +82,7 @@ Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_deskt
 | `EMBEDDING_PROVIDER` | `gemini` | `gemini`, `openai`, or `ollama` |
 | `LLM_PROVIDER` | `gemini` | `gemini`, `openai`, or `ollama` |
 | `GEMINI_API_KEY` | — | Your Gemini API key |
-| `GEMINI_LLM_MODEL` | `gemini-2.5-flash` | Gemini model for LLM |
+| `GEMINI_LLM_MODEL` | `gemma-3-27b-it` | Gemini model for LLM |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Gemini model for embeddings |
 | `OPENAI_API_KEY` | — | Your OpenAI API key |
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model |
