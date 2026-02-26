@@ -16,7 +16,8 @@ from schemas import (
     RelatedNotesResponse, NoteYoutubeCreate
 )
 from services.embedding import get_embedding
-from services.llm import synthesize_answer, summarize_youtube_video
+from services.llm import summarize_youtube_video
+from services.agent import rag_agent
 from services.pipeline import process_note
 from youtube_transcript_api import YouTubeTranscriptApi
 import urllib.parse
@@ -209,14 +210,32 @@ async def search_notes(
         elif title:
             contexts.append(f"Title: {title}")
 
-    # RAG synthesis if requested
+    # RAG synthesis via LangGraph Agent if requested
     rag = None
-    if synthesize and contexts:
+    if synthesize:
         try:
-            answer = await synthesize_answer(q, contexts[:5])
-            rag = RAGResponse(answer=answer, sources=search_results[:5])
-        except Exception:
-            pass  # Gracefully degrade if LLM fails
+            # The agent handles routing, searching, grading, rewriting, and synthesis internally
+            initial_state = {
+                "query": q,
+                "rewritten_query": "",
+                "retrieved_notes": [],
+                "relevance_score": 0.0,
+                "final_answer": "",
+                "sources": [],
+                "retry_count": 0
+            }
+            final_state = await rag_agent.ainvoke(initial_state)
+            rag = RAGResponse(
+                answer=final_state.get("final_answer", ""),
+                sources=final_state.get("sources", [])
+            )
+            # The agent already searched, so we can override the basic search_results
+            # just to ensure they match exactly what the agent saw.
+            if final_state.get("sources"):
+                search_results = final_state["sources"]
+        except Exception as e:
+            print(f"RAG Agent Error: {e}")
+            pass  # Gracefully degrade if LLM / Agent fails
 
     return SearchResponse(results=search_results, rag=rag)
 
