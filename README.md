@@ -6,6 +6,40 @@
 
 ---
 
+## 📸 Screenshots
+
+### Your Vault — Dashboard
+
+![Dashboard](screenshots/dashboard.png)
+
+*Dark-themed masonry grid showing all saved notes with AI-generated summaries, auto tags, topic badges, and language detection.*
+
+### Note Detail — AI Summary, Key Concepts & Backlinks
+
+![Note Detail](screenshots/note_detail.png)
+
+*Full note view with AI-generated TL;DR summary, key concepts extraction, auto/custom tags, original content, and linked notes with similarity scores.*
+
+### Semantic Search + RAG Answer
+
+![Search RAG](screenshots/search_rag.png)
+
+*Natural language search powered by pgvector. Returns an AI-synthesized answer grounded in YOUR notes, with cited source cards and similarity percentages.*
+
+### Knowledge Graph — Obsidian-Style Topic Visualization
+
+![Topics Graph](screenshots/topics_graph.png)
+
+*Interactive force-directed graph. Large purple nodes = topic clusters, small gray nodes = individual notes. Hover to highlight connections, click to explore.*
+
+### API Documentation — Swagger UI
+
+![API Docs](screenshots/api_docs.png)
+
+*Auto-generated interactive API docs via FastAPI. All 15+ endpoints for notes, topics, graph, and health checks.*
+
+---
+
 ## ✨ Features
 
 - 🧠 **Auto Summarization** — Every saved note gets a 3-sentence TL;DR and key concepts extracted automatically via LLM
@@ -190,11 +224,19 @@ SARVAM_API_KEY=your_sarvam_key
 DATABASE_URL=postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault
 ```
 
-### Step 3 — Start Backend and Database
+### Step 3 — Run the Application
+
+#### Option A — Docker (Recommended) 🐳
+
+One command starts the **entire stack** (Postgres + Backend + Frontend):
 
 ```bash
+make up
+# OR directly:
 docker compose up --build
 ```
+
+> To run in background: `make up-detach`
 
 Wait for:
 
@@ -202,21 +244,45 @@ Wait for:
 ✅ Database ready
 ✅ pgvector extension loaded
 ✅ MindVault API running on http://localhost:8000
+✅ Frontend running on http://localhost:5173
 ```
 
-Visit [http://localhost:8000/docs](http://localhost:8000/docs) for interactive API docs.
+| Service    | URL                                                          |
+|------------|--------------------------------------------------------------|
+| Frontend   | [http://localhost:5173](http://localhost:5173)                |
+| Backend API| [http://localhost:8000/docs](http://localhost:8000/docs)      |
+| PostgreSQL | `localhost:5432`                                             |
 
-### Step 4 — Start Frontend
+#### Option B — Local Development (without Docker)
+
+If you prefer running services individually, open **two terminals**:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# Terminal 1 — Backend
+make install-backend   # first time only
+make dev-backend
+# runs: cd backend && uvicorn main:app --reload --port 8000
+
+# Terminal 2 — Frontend
+make install-frontend  # first time only
+make dev-frontend
+# runs: cd frontend && npm run dev
 ```
 
-Visit [http://localhost:5173](http://localhost:5173)
+> **Note:** You'll need a PostgreSQL 16 instance with pgvector running separately on port `5432`.
 
-### Step 5 — Load Chrome Extension
+#### Useful Commands
+
+| Command          | Description                    |
+|------------------|--------------------------------|
+| `make up`        | Start full stack (foreground)  |
+| `make up-detach` | Start full stack (background)  |
+| `make down`      | Stop all containers            |
+| `make logs`      | View backend logs              |
+| `make shell-db`  | Open a psql shell              |
+| `make test-smoke`| Run smoke tests                |
+
+### Step 4 — Load Chrome Extension
 
 1. Go to `chrome://extensions` in Chrome
 2. Toggle **Developer mode** ON (top right)
@@ -224,7 +290,7 @@ Visit [http://localhost:5173](http://localhost:5173)
 4. Select the `extension/` folder
 5. Pin the MindVault icon to your toolbar
 
-### Step 6 — Connect Claude Desktop (optional)
+### Step 5 — Connect Claude Desktop (optional)
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
