@@ -96,8 +96,12 @@ async def process_note(note_id: uuid.UUID) -> None:
             logger.info(f"✅ Successfully processed note: {title}")
             
             # --- Auto Clustering ---
-            # Fire-and-forget background task to re-run KMeans
-            asyncio.create_task(cluster_notes())
+            # Fire-and-forget background task to re-run KMeans (scoped to user)
+            note_user_id = note.user_id
+            if note_user_id:
+                asyncio.create_task(cluster_notes(user_id=note_user_id))
+            else:
+                asyncio.create_task(cluster_notes())
 
         except Exception as e:
             logger.error(f"Pipeline DB write failed for note {note_id}: {e}", exc_info=True)
@@ -115,6 +119,7 @@ async def _create_links(
             FROM notes
             WHERE id != :note_id
               AND embedding IS NOT NULL
+              AND (user_id = (SELECT user_id FROM notes WHERE id = CAST(:note_id AS uuid)) OR user_id IS NULL)
             ORDER BY embedding <=> CAST(:emb AS vector)
             LIMIT :top_k
         """),

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from models import Note, NoteLink, Topic
+from models import Note, NoteLink, Topic, User
 from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
@@ -23,6 +23,7 @@ from services.language import detect_language
 from services.pipeline import process_note
 from services.transcription import transcribe_youtube
 from services.tagging import generate_tags
+from middleware.auth import get_current_user, CurrentUser
 import urllib.parse
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 async def create_note(
     body: NoteCreate,
     background_tasks: BackgroundTasks,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new note and trigger async AI processing."""
@@ -44,6 +46,7 @@ async def create_note(
         content=content,
         source_url=body.source_url,
         tags=body.tags or [],
+        user_id=current_user.id,
     )
     db.add(note)
     await db.flush()
@@ -59,6 +62,7 @@ async def create_note(
 async def create_youtube_note(
     body: NoteYoutubeCreate,
     background_tasks: BackgroundTasks,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch YouTube transcript, summarize via LLM, and save as a new note."""
@@ -84,6 +88,7 @@ async def create_youtube_note(
         source_url=body.video_url,
         tags=["youtube", "video"],
         language=lang,
+        user_id=current_user.id,
     )
     db.add(note)
     await db.flush()
@@ -102,10 +107,15 @@ async def list_notes(
     language: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """List all notes with optional filters."""
-    query = select(Note).order_by(Note.created_at.desc())
+    """List all notes with optional filters — scoped to current user."""
+    query = (
+        select(Note)
+        .where(Note.user_id == current_user.id)
+        .order_by(Note.created_at.desc())
+    )
 
     if topic_id:
         query = query.where(Note.topic_id == topic_id)
@@ -149,23 +159,25 @@ async def search_notes(
     q: str = Query(..., min_length=1),
     top_k: int = Query(10, ge=1, le=50),
     synthesize: bool = Query(False),
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Semantic search via pgvector cosine similarity, with optional RAG synthesis."""
+    """Semantic search via pgvector cosine similarity, with optional RAG synthesis — scoped to current user."""
     # Generate query embedding
     query_embedding = await get_embedding(q)
 
-    # Search via pgvector
+    # Search via pgvector — scoped to current user
     result = await db.execute(
         text("""
             SELECT id, title, summary, tags, auto_tags, user_tags, topic_id, source_url, language, is_processed, processed, created_at,
                    1 - (embedding <=> CAST(:emb AS vector)) as similarity
             FROM notes
             WHERE embedding IS NOT NULL
+              AND user_id = CAST(:uid AS uuid)
             ORDER BY embedding <=> CAST(:emb AS vector)
             LIMIT :top_k
         """),
-        {"emb": str(query_embedding), "top_k": top_k},
+        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id)},
     )
     rows = result.all()
 
@@ -217,7 +229,8 @@ async def search_notes(
                 "relevance_score": 0.0,
                 "final_answer": "",
                 "sources": [],
-                "retry_count": 0
+                "retry_count": 0,
+                "user_id": str(current_user.id),
             }
             final_state = await rag_agent.ainvoke(initial_state)
             rag = RAGResponse(
@@ -241,16 +254,17 @@ async def get_related_notes(
     url: str | None = Query(None),
     content: str | None = Query(None),
     top_k: int = Query(5, ge=1, le=20),
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Find notes related to a URL or content snippet."""
+    """Find notes related to a URL or content snippet — scoped to current user."""
     if not url and not content:
         raise HTTPException(400, "Provide either 'url' or 'content' query parameter")
 
     # If URL provided, try to find exact match first
     if url:
         result = await db.execute(
-            select(Note).where(Note.source_url == url).limit(1)
+            select(Note).where(Note.source_url == url, Note.user_id == current_user.id).limit(1)
         )
         existing = result.scalar_one_or_none()
         if existing and existing.embedding is not None:
@@ -261,10 +275,11 @@ async def get_related_notes(
                            1 - (embedding <=> CAST(:emb AS vector)) as similarity
                     FROM notes
                     WHERE id != :note_id AND embedding IS NOT NULL
+                      AND user_id = CAST(:uid AS uuid)
                     ORDER BY embedding <=> CAST(:emb AS vector)
                     LIMIT :top_k
                 """),
-                {"emb": str(list(existing.embedding)), "note_id": str(existing.id), "top_k": top_k},
+                {"emb": str(list(existing.embedding)), "note_id": str(existing.id), "top_k": top_k, "uid": str(current_user.id)},
             )
             rows = result.all()
             return RelatedNotesResponse(notes=[
@@ -288,10 +303,11 @@ async def get_related_notes(
                    1 - (embedding <=> CAST(:emb AS vector)) as similarity
             FROM notes
             WHERE embedding IS NOT NULL
+              AND user_id = CAST(:uid AS uuid)
             ORDER BY embedding <=> CAST(:emb AS vector)
             LIMIT :top_k
         """),
-        {"emb": str(query_embedding), "top_k": top_k},
+        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id)},
     )
     rows = result.all()
 
@@ -310,11 +326,12 @@ async def get_related_notes(
 @router.get("/{note_id}", response_model=NoteOut)
 async def get_note(
     note_id: uuid.UUID,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a single note with backlinks."""
+    """Get a single note with backlinks — must belong to current user."""
     note = await db.get(Note, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(404, "Note not found")
 
     return await _note_with_backlinks(db, note)
@@ -324,11 +341,12 @@ async def get_note(
 async def trigger_processing(
     note_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually trigger AI processing for a note."""
+    """Manually trigger AI processing for a note — must belong to current user."""
     note = await db.get(Note, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(404, "Note not found")
 
     background_tasks.add_task(process_note, note.id)
@@ -338,11 +356,12 @@ async def trigger_processing(
 @router.delete("/{note_id}", status_code=204)
 async def delete_note(
     note_id: uuid.UUID,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a note."""
+    """Delete a note — must belong to current user."""
     note = await db.get(Note, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(404, "Note not found")
         
     # If the note belongs to a topic, decrement the topic's note count
@@ -360,11 +379,12 @@ async def delete_note(
 async def update_note_tags(
     note_id: uuid.UUID,
     body: TagUpdate,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually update a note's user_tags without affecting auto_tags."""
+    """Manually update a note's user_tags — must belong to current user."""
     note = await db.get(Note, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(404, "Note not found")
         
     # Standardize tags
@@ -378,11 +398,12 @@ async def update_note_tags(
 @router.post("/{note_id}/suggest-tags", response_model=SuggestTagsResponse)
 async def suggest_note_tags(
     note_id: uuid.UUID,
+    current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate dynamic tag suggestions for a note (does not save)."""
+    """Generate dynamic tag suggestions for a note — must belong to current user."""
     note = await db.get(Note, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(404, "Note not found")
         
     suggestions = await generate_tags(note.content, note.language)

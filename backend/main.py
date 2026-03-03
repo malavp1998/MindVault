@@ -7,10 +7,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
+from routes.auth import router as auth_router
 from routes.notes import router as notes_router
 from routes.topics import router as topics_router
 from routes.graph import router as graph_router
+from routes.auth import limiter
 from mcp_server import mcp
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +38,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +52,7 @@ app.add_middleware(
 )
 
 # REST API routes
+app.include_router(auth_router)           # /auth/* — public (no JWT)
 app.include_router(notes_router, prefix="/api")
 app.include_router(topics_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")

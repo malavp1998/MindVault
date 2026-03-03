@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     sarvam_api_key: str = ""
     jina_api_key: str = ""
 
+    # Twilio
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_phone_number: str = ""
+
+    # Auth & JWT Settings
+    auth_method: str = "credentials"  # "credentials" or "otp"
+    jwt_secret_key: str = "change_me_to_a_32_char_minimum_secret"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 10080  # 7 days
+
+    # OTP settings (only used if auth_method="otp")
+    otp_expire_minutes: int = 10
+
     # App
     backend_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:5173"

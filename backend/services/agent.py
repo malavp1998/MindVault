@@ -26,6 +26,7 @@ class AgentState(TypedDict):
     final_answer: str
     sources: list[SearchResult]
     retry_count: int
+    user_id: str  # UUID string for per-user scoping
 
 
 class RouteDecision(BaseModel):
@@ -89,20 +90,36 @@ async def search_node(state: AgentState) -> dict:
     query_embedding = await get_embedding(query_to_search)
 
     search_results = []
+    user_id = state.get("user_id")
     
     # Open a short-lived session since nodes aren't currently passed the FastAPI request DB session.
     async with async_session() as db:
-        result = await db.execute(
-            text("""
-                SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
-                       1 - (embedding <=> CAST(:emb AS vector)) as similarity
-                FROM notes
-                WHERE embedding IS NOT NULL
-                ORDER BY embedding <=> CAST(:emb AS vector)
-                LIMIT :top_k
-            """),
-            {"emb": str(query_embedding), "top_k": 5},
-        )
+        # Build query with user scoping if user_id is available
+        if user_id:
+            result = await db.execute(
+                text("""
+                    SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
+                           1 - (embedding <=> CAST(:emb AS vector)) as similarity
+                    FROM notes
+                    WHERE embedding IS NOT NULL
+                      AND user_id = CAST(:uid AS uuid)
+                    ORDER BY embedding <=> CAST(:emb AS vector)
+                    LIMIT :top_k
+                """),
+                {"emb": str(query_embedding), "top_k": 5, "uid": user_id},
+            )
+        else:
+            result = await db.execute(
+                text("""
+                    SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
+                           1 - (embedding <=> CAST(:emb AS vector)) as similarity
+                    FROM notes
+                    WHERE embedding IS NOT NULL
+                    ORDER BY embedding <=> CAST(:emb AS vector)
+                    LIMIT :top_k
+                """),
+                {"emb": str(query_embedding), "top_k": 5},
+            )
         rows = result.all()
         
         for row in rows:

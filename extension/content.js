@@ -9,6 +9,22 @@
 
   const API_BASE = 'http://localhost:8000/api';
 
+  // ─── Token Helper ───────────────────────────────────────────
+  async function getToken() {
+    return new Promise(resolve => {
+      chrome.storage.local.get(['mv_token'], result => {
+        resolve(result.mv_token || null);
+      });
+    });
+  }
+
+  async function authHeaders() {
+    const token = await getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  }
+
   // ─── Floating Action Button ──────────────────────────────────
   const fab = document.createElement('button');
   fab.id = 'mindvault-fab';
@@ -171,9 +187,10 @@
     btn.textContent = '⏳ Saving...';
 
     try {
+      const headers = await authHeaders();
       const response = await fetch(`${API_BASE}/notes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           title: pageTitle,
           content: pageContent.substring(0, 50000),
@@ -255,7 +272,8 @@
     try {
       // Try by URL first, then by content
       let url = `${API_BASE}/notes/related?url=${encodeURIComponent(pageUrl)}&top_k=5`;
-      const response = await fetch(url);
+      const headers = await authHeaders();
+      const response = await fetch(url, { headers });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -266,7 +284,8 @@
       if (!data.notes || data.notes.length === 0) {
         // Try content-based search
         const contentResponse = await fetch(
-          `${API_BASE}/notes/related?content=${encodeURIComponent(pageTitle + ' ' + pageContent.substring(0, 500))}&top_k=5`
+          `${API_BASE}/notes/related?content=${encodeURIComponent(pageTitle + ' ' + pageContent.substring(0, 500))}&top_k=5`,
+          { headers: await authHeaders() }
         );
         if (contentResponse.ok) {
           const contentData = await contentResponse.json();

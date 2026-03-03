@@ -6,24 +6,33 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Note, Topic
+from models import Note, Topic, User
+from middleware.auth import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
 
 @router.get("/data")
-async def get_graph_data(db: AsyncSession = Depends(get_db)):
+async def get_graph_data(
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
     """
-    Returns a force-graph compatible payload of all topics and notes.
+    Returns a force-graph compatible payload of all topics and notes — scoped to current user.
     Notes are linked to their topic, and notes sharing tags are cross-linked.
     """
-    # 1. Fetch all topics
-    topic_result = await db.execute(select(Topic))
+    # 1. Fetch all topics for this user
+    topic_result = await db.execute(
+        select(Topic).where(Topic.user_id == current_user.id)
+    )
     topics = topic_result.scalars().all()
 
-    # 2. Fetch all processed notes that have been assigned a topic or have tags
+    # 2. Fetch all processed notes for this user
     note_result = await db.execute(
-        select(Note).where(Note.is_processed == True)  # noqa: E712
+        select(Note).where(
+            Note.is_processed == True,  # noqa: E712
+            Note.user_id == current_user.id,
+        )
     )
     notes = note_result.scalars().all()
 

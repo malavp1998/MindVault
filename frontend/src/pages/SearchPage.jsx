@@ -6,6 +6,7 @@ export default function SearchPage() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [synthesize, setSynthesize] = useState(true);
     const navigate = useNavigate();
 
@@ -14,11 +15,16 @@ export default function SearchPage() {
         if (!query.trim()) return;
 
         setLoading(true);
+        setError(null);
         try {
             const data = await searchNotes(query, { topK: 10, synthesize });
             setResults(data);
         } catch (err) {
             console.error('Search failed:', err);
+            const msg = err.code === 'ECONNABORTED'
+                ? 'Search timed out — the AI is under heavy load. Try again or uncheck the AI answer option.'
+                : err.response?.data?.detail || 'Search failed. Please try again.';
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -74,6 +80,16 @@ export default function SearchPage() {
                     </button>
                 </div>
             </form>
+
+            {/* Error */}
+            {error && (
+                <div className="card" style={{ borderLeft: '4px solid #ef4444', background: 'rgba(239,68,68,0.08)', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>⚠️</span>
+                        <span style={{ color: '#ef4444', fontSize: 14 }}>{error}</span>
+                    </div>
+                </div>
+            )}
 
             {/* RAG Answer */}
             {results?.rag && (

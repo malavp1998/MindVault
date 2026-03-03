@@ -28,8 +28,8 @@ export default function TopicsPage() {
     async function loadGraph() {
         setLoading(true);
         try {
-            const res = await fetch(`${API}/graph/data`);
-            const data = await res.json();
+            const res = await api.get('/graph/data');
+            const data = res.data;
             setGraphData(data);
             setFilteredData(data);
         } catch (err) {
@@ -63,13 +63,13 @@ export default function TopicsPage() {
         try {
             if (node.type === "topic") {
                 const topicId = node.id.replace("topic-", "");
-                const notesRes = await fetch(`${API}/topics/${topicId}`);
-                const topicDetail = await notesRes.json();
+                const notesRes = await api.get(`/topics/${topicId}`);
+                const topicDetail = notesRes.data;
                 setSidePanel({ type: "topic", node, data: topicDetail });
             } else {
                 const noteId = node.id.replace("note-", "");
-                const noteRes = await fetch(`${API}/notes/${noteId}`);
-                const note = await noteRes.json();
+                const noteRes = await api.get(`/notes/${noteId}`);
+                const note = noteRes.data;
                 setSidePanel({ type: "note", node, data: note });
             }
         } catch (err) {

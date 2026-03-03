@@ -52,17 +52,19 @@ async def find_optimal_clusters(embeddings: list[list[float]]) -> int:
     return best_k
 
 
-async def cluster_notes() -> None:
+async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
     """
     Fetch all embeddings from DB and dynamically re-cluster using KMeans.
     Run as a background task after every new note is processed.
+    If user_id is provided, only cluster that user's notes.
     """
     async with async_session() as db:
         try:
-            # 1. Fetch all notes that have embeddings
-            result = await db.execute(
-                select(Note).where(Note.embedding.isnot(None))
-            )
+            # 1. Fetch all notes that have embeddings (scoped to user if provided)
+            query = select(Note).where(Note.embedding.isnot(None))
+            if user_id is not None:
+                query = query.where(Note.user_id == user_id)
+            result = await db.execute(query)
             notes_db = result.scalars().all()
 
             if len(notes_db) < 1:
@@ -122,6 +124,7 @@ async def cluster_notes() -> None:
                         name=topic_name,
                         cluster_id=cluster_id,
                         note_count=len(cluster_note_ids),
+                        user_id=user_id,
                     )
                     db.add(topic)
                 else:

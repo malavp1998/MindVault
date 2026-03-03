@@ -3,12 +3,65 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, Float, ForeignKey, Integer, JSON, Boolean
+from typing import Optional, List
+from sqlalchemy import String, Text, DateTime, Float, ForeignKey, Integer, JSON, Boolean, VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from pgvector.sqlalchemy import Vector
 from database import Base
 
+
+# ─── Auth Models ────────────────────────────────────────────────
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    username: Mapped[Optional[str]] = mapped_column(
+        VARCHAR(50), unique=True, nullable=True
+    )
+    email: Mapped[Optional[str]] = mapped_column(
+        VARCHAR(255), unique=True, nullable=True
+    )
+    hashed_password: Mapped[Optional[str]] = mapped_column(
+        VARCHAR(255), nullable=True
+    )
+    phone_number: Mapped[Optional[str]] = mapped_column(
+        VARCHAR(15), unique=True, nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_login: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    notes: Mapped[List["Note"]] = relationship("Note", back_populates="owner", cascade="all, delete-orphan")
+    topics: Mapped[List["Topic"]] = relationship("Topic", back_populates="owner", cascade="all, delete-orphan")
+
+
+class OTPVerification(Base):
+    __tablename__ = "otp_verifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    phone_number: Mapped[str] = mapped_column(VARCHAR(15), nullable=False)
+    otp_code: Mapped[str] = mapped_column(VARCHAR(6), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    is_used: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+# ─── Knowledge Models ──────────────────────────────────────────
 
 class Note(Base):
     __tablename__ = "notes"
@@ -18,15 +71,18 @@ class Note(Base):
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    tags: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list) # Legacy, optionally remove later
-    auto_tags: Mapped[list[str]] = mapped_column(ARRAY(String), server_default="{}")
-    user_tags: Mapped[list[str]] = mapped_column(ARRAY(String), server_default="{}")
+    source_url: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list) # Legacy, optionally remove later
+    auto_tags: Mapped[List[str]] = mapped_column(ARRAY(String), server_default="{}")
+    user_tags: Mapped[List[str]] = mapped_column(ARRAY(String), server_default="{}")
     processed: Mapped[bool] = mapped_column(Boolean, server_default="false")
-    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    key_concepts: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    key_concepts: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     language: Mapped[str] = mapped_column(String(10), default="en")
-    topic_id: Mapped[uuid.UUID | None] = mapped_column(
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    topic_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("topics.id"), nullable=True
     )
     embedding = mapped_column(Vector(1536), nullable=True)
@@ -41,11 +97,12 @@ class Note(Base):
     )
 
     # Relationships
-    topic: Mapped["Topic | None"] = relationship("Topic", back_populates="notes")
-    outgoing_links: Mapped[list["NoteLink"]] = relationship(
+    owner: Mapped[Optional["User"]] = relationship("User", back_populates="notes")
+    topic: Mapped[Optional["Topic"]] = relationship("Topic", back_populates="notes")
+    outgoing_links: Mapped[List["NoteLink"]] = relationship(
         "NoteLink", foreign_keys="NoteLink.source_id", back_populates="source", cascade="all, delete-orphan"
     )
-    incoming_links: Mapped[list["NoteLink"]] = relationship(
+    incoming_links: Mapped[List["NoteLink"]] = relationship(
         "NoteLink", foreign_keys="NoteLink.target_id", back_populates="target", cascade="all, delete-orphan"
     )
 
@@ -57,16 +114,20 @@ class Topic(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    cluster_id: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cluster_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     centroid = mapped_column(Vector(1536), nullable=True)
     note_count: Mapped[int] = mapped_column(Integer, default=0)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     # Relationships
-    notes: Mapped[list["Note"]] = relationship("Note", back_populates="topic")
+    owner: Mapped[Optional["User"]] = relationship("User", back_populates="topics")
+    notes: Mapped[List["Note"]] = relationship("Note", back_populates="topic")
 
 
 class NoteLink(Base):
