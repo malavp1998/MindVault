@@ -9,13 +9,21 @@ from config import get_settings
 
 settings = get_settings()
 
+# asyncpg doesn't support ?sslmode= query param — strip it and use connect_args instead
+_db_url = settings.database_url
+_connect_args = {}
+if "sslmode=require" in _db_url:
+    _db_url = _db_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
+    _connect_args = {"ssl": True}
+
 engine = create_async_engine(
-    settings.database_url,
+    _db_url,
     echo=False,
     pool_size=10,
     max_overflow=20,
-    pool_pre_ping=True,  # Crucial to detect & discard broken/aborted connections
+    pool_pre_ping=True,
     pool_recycle=3600,
+    connect_args=_connect_args,
 )
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
