@@ -1,5 +1,5 @@
 from __future__ import annotations
-"""LLM service — fully multilingual routing via Groq and Sarvam."""
+"""LLM service — multilingual routing via Groq, Gemini, and Sarvam with smart fallback."""
 
 import json
 from openai import AsyncOpenAI
@@ -8,12 +8,15 @@ from services.language import detect_language, is_indic
 
 settings = get_settings()
 
+# ── CLIENTS ───────────────────────────────────────────
+
 _groq_client: AsyncOpenAI | None = None
+_gemini_client: AsyncOpenAI | None = None
 _sarvam_client: AsyncOpenAI | None = None
 
 
 def _get_groq_client() -> AsyncOpenAI:
-    """English / Global router client via Groq."""
+    """Groq client for English LLM."""
     global _groq_client
     if _groq_client is None:
         _groq_client = AsyncOpenAI(
@@ -23,8 +26,19 @@ def _get_groq_client() -> AsyncOpenAI:
     return _groq_client
 
 
+def _get_gemini_client() -> AsyncOpenAI:
+    """Gemini client for Indic LLM (primary)."""
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = AsyncOpenAI(
+            api_key=settings.gemini_api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+    return _gemini_client
+
+
 def _get_sarvam_client() -> AsyncOpenAI:
-    """Indic router client via Sarvam AI."""
+    """Sarvam client for Indic LLM (fallback)."""
     global _sarvam_client
     if _sarvam_client is None:
         _sarvam_client = AsyncOpenAI(
@@ -34,53 +48,93 @@ def _get_sarvam_client() -> AsyncOpenAI:
     return _sarvam_client
 
 
-async def llm_complete(prompt: str, lang: str | None = None) -> str:
-    """Smart routing LLM completion based on text language."""
-    detected_lang = lang or detect_language(prompt)
-    
-    if is_indic(detected_lang):
-        # Use Sarvam for Indic languages
-        client = _get_sarvam_client()
-        response = await client.chat.completions.create(
-            model="sarvam-2b",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000
-        )
-    else:
-        # Use Groq for English and others
-        client = _get_groq_client()
-        response = await client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000
-        )
-    
+# ── CALLERS ───────────────────────────────────────────
+
+async def call_groq(prompt: str, model: str) -> str:
+    client = _get_groq_client()
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
+    )
     return response.choices[0].message.content.strip()
 
+
+async def call_gemini(prompt: str, model: str) -> str:
+    client = _get_gemini_client()
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
+    )
+    return response.choices[0].message.content.strip()
+
+
+async def call_sarvam(prompt: str, model: str) -> str:
+    client = _get_sarvam_client()
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000
+    )
+    return response.choices[0].message.content.strip()
+
+
+# ── MAIN ROUTER WITH FALLBACK ─────────────────────────
+
+async def llm_complete(prompt: str, lang: str | None = None) -> str:
+    """Smart routing LLM completion with fallback on rate limits."""
+    detected_lang = lang or detect_language(prompt)
+
+    if is_indic(detected_lang):
+        # Indic: Gemini primary → Sarvam fallback → Groq 8b last resort
+        try:
+            return await call_gemini(prompt, settings.llm_indic_primary)
+        except Exception as e:
+            if "quota" in str(e).lower() or "rate" in str(e).lower() or "429" in str(e):
+                print(f"[LLM] Gemini rate limit hit, falling back to Sarvam")
+                try:
+                    return await call_sarvam(prompt, settings.llm_indic_fallback)
+                except Exception as e2:
+                    print(f"[LLM] Sarvam also failed: {e2}, using Groq 8b")
+                    return await call_groq(prompt, settings.llm_english_fallback)
+            raise e
+    else:
+        # English: Groq 70b primary → Groq 8b fallback
+        try:
+            return await call_groq(prompt, settings.llm_english_primary)
+        except Exception as e:
+            if "quota" in str(e).lower() or "rate" in str(e).lower() or "429" in str(e):
+                print(f"[LLM] Groq 70b rate limit hit, falling back to 8b")
+                return await call_groq(prompt, settings.llm_english_fallback)
+            raise e
+
+
+# ── TASK SPECIFIC FUNCTIONS ───────────────────────────
 
 async def generate_summary(content: str, content_language: str | None = None) -> str:
     """Generate a precise 3-sentence summary relying on smart routing."""
     lang = content_language or detect_language(content)
-    
+
     if is_indic(lang):
         summary_prompt = f"""
         Is content ka summary do same language mein:
         1. 3 sentence ka TL;DR
         2. Key concepts (bullet points)
         3. Important insights
-        
+
         Content: {content[:4000]}
         """
     else:
         summary_prompt = f"""
         Summarize this content:
         1. 3-sentence TL;DR
-        2. Key concepts (bullet points)  
+        2. Key concepts (bullet points)
         3. Actionable insights
-        
+
         Content: {content[:4000]}
         """
-        
+
     return await llm_complete(summary_prompt, lang)
 
 
@@ -102,27 +156,27 @@ async def synthesize_answer(query: str, contexts: list[str]) -> str:
     """RAG: Generate a synthesized answer from retrieved contexts."""
     lang = detect_language(query)
     context_block = "\n\n".join(contexts)
-    
+
     if is_indic(lang):
         prompt = f"""
         Sirf neeche diye notes ke basis par answer do.
         Answer same language mein do jisme question hai.
-        
+
         Notes:
         {context_block}
-        
+
         Question: {query}
         """
     else:
         prompt = f"""
         Answer using ONLY the context from the notes below.
-        
+
         Notes:
         {context_block}
-        
+
         Question: {query}
         """
-    
+
     return await llm_complete(prompt, lang)
 
 
@@ -156,5 +210,5 @@ async def summarize_youtube_video(transcript: str, content_language: str | None 
         Transcript:
         {transcript[:50000]}
         """
-    
+
     return await llm_complete(prompt, lang)

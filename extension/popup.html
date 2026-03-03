@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindVault</title>
+    <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+    <div id="app">
+        <!-- LOGIN SCREEN -->
+        <div id="screen-login" class="screen hidden">
+            <div class="logo">
+                <span class="logo-icon">🧠</span>
+                <h1>MindVault</h1>
+                <p>Login to your vault</p>
+            </div>
+            <div class="form">
+                <input id="login-username" type="text"
+                    placeholder="Username" class="input" />
+                <input id="login-password" type="password"
+                    placeholder="Password" class="input" />
+                <div id="login-error" class="error hidden"></div>
+                <button id="btn-login" class="btn btn-primary">Login</button>
+                <p class="hint">
+                    New user? Register at
+                    <a href="http://localhost:5173/login"
+                        target="_blank">localhost:5173</a>
+                </p>
+            </div>
+        </div>
+
+        <!-- LOADING SCREEN -->
+        <div id="screen-loading" class="screen">
+            <div class="loader"></div>
+        </div>
+
+        <!-- MAIN SCREEN -->
+        <div id="screen-main" class="screen hidden">
+
+            <!-- Header -->
+            <div class="header">
+                <span class="header-logo">🧠</span>
+                <span id="header-username" class="header-user"></span>
+                <button id="btn-logout" class="btn-icon" title="Logout">⏻</button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="save">Save</button>
+                <button class="tab" data-tab="related">Related</button>
+                <button class="tab" data-tab="search">Search</button>
+            </div>
+
+            <!-- SAVE TAB -->
+            <div id="tab-save" class="tab-content">
+                <!-- YouTube detected banner -->
+                <div id="youtube-banner" class="youtube-banner hidden">
+                    <span>📺 YouTube video detected</span>
+                    <button id="btn-summarize-yt" class="btn btn-youtube">
+                        Summarize & Save
+                    </button>
+                </div>
+
+                <!-- Page save form -->
+                <div id="save-form">
+                    <div class="page-info">
+                        <p id="page-title" class="page-title"></p>
+                        <p id="page-url" class="page-url"></p>
+                    </div>
+                    <textarea id="annotation" class="textarea"
+                        placeholder="Add your thoughts or annotation (optional)..."
+                        rows="3"></textarea>
+                    <input id="user-tags" type="text" class="input"
+                        placeholder="Tags (comma separated): ai, learning" />
+                    <button id="btn-save-page" class="btn btn-primary">
+                        💾 Save to Vault
+                    </button>
+                </div>
+
+                <!-- Save result -->
+                <div id="save-result" class="result hidden">
+                    <div class="result-success">
+                        <span>✅ Saved to Vault!</span>
+                        <div id="result-tags" class="tags"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RELATED TAB -->
+            <div id="tab-related" class="tab-content hidden">
+                <p class="tab-desc">Notes related to this page</p>
+                <div id="related-loading" class="loader-sm hidden"></div>
+                <div id="related-list" class="note-list"></div>
+                <p id="related-empty" class="empty hidden">
+                    No related notes found
+                </p>
+            </div>
+
+            <!-- SEARCH TAB -->
+            <div id="tab-search" class="tab-content hidden">
+                <div class="search-box">
+                    <input id="search-input" type="text" class="input"
+                        placeholder="Ask your vault anything..." />
+                    <button id="btn-search" class="btn btn-primary">Search</button>
+                </div>
+                <div id="search-loading" class="loader-sm hidden"></div>
+                <div id="search-answer" class="answer hidden"></div>
+                <div id="search-sources" class="note-list"></div>
+            </div>
+
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

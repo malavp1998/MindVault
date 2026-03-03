@@ -25,6 +25,7 @@ from services.transcription import transcribe_youtube
 from services.tagging import generate_tags
 from middleware.auth import get_current_user, CurrentUser
 import urllib.parse
+import yt_dlp
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -58,6 +59,21 @@ async def create_note(
     return _note_to_out(note)
 
 
+def get_youtube_title(video_url: str) -> str:
+    """Fetch video title via yt-dlp metadata only — no download."""
+    try:
+        ydl_opts = {
+            'quiet': True,
+            'skip_download': True,
+            'extract_flat': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=False)
+            return info.get('title', 'YouTube Video')
+    except Exception:
+        return 'YouTube Video'
+
+
 @router.post("/youtube", response_model=NoteOut, status_code=201)
 async def create_youtube_note(
     body: NoteYoutubeCreate,
@@ -66,13 +82,16 @@ async def create_youtube_note(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch YouTube transcript, summarize via LLM, and save as a new note."""
+    # 0. Fetch real video title (metadata only, no download)
+    video_title = get_youtube_title(body.video_url)
+
     # 1. Fetch transcript and detect language from the new cloud service
     try:
         transcript_text, lang = await transcribe_youtube(body.video_url)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
 
-    # 3. Ask LLM to summarize natively
+    # 2. Ask LLM to summarize natively
     try:
         summary_content = await summarize_youtube_video(transcript_text, content_language=lang)
     except Exception as e:
@@ -81,9 +100,9 @@ async def create_youtube_note(
     if body.annotation:
         summary_content = f"[{lang.upper()} User Annotation]: {body.annotation}\n\n{summary_content}"
 
-    # 4. Save to DB
+    # 3. Save to DB with actual video title
     note = Note(
-        title=f"YouTube Video",
+        title=video_title,
         content=summary_content,
         source_url=body.video_url,
         tags=["youtube", "video"],
@@ -94,7 +113,7 @@ async def create_youtube_note(
     await db.flush()
     await db.refresh(note)
 
-    # 5. Trigger standard AI async embedding / linking pipeline
+    # 4. Trigger standard AI async embedding / linking pipeline
     background_tasks.add_task(process_note, note.id)
 
     return _note_to_out(note)

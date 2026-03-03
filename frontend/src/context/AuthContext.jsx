@@ -29,12 +29,25 @@ export function AuthProvider({ children }) {
         localStorage.setItem("mv_token", newToken);
         setToken(newToken);
         setUser(userData);
+
+        // Sync token to chrome extension storage
+        if (typeof chrome !== "undefined" && chrome.storage) {
+            chrome.storage.local.set({
+                mv_token: newToken,
+                mv_user: JSON.stringify(userData),
+            });
+        }
     };
 
     const logout = () => {
         localStorage.removeItem("mv_token");
         setToken(null);
         setUser(null);
+
+        // Clear extension storage on logout
+        if (typeof chrome !== "undefined" && chrome.storage) {
+            chrome.storage.local.remove(["mv_token", "mv_user"]);
+        }
     };
 
     return (

@@ -91,8 +91,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     }
 
 @router.post("/login")
-@limiter.limit("10/minute")
-async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     if settings.auth_method != "credentials":
         raise HTTPException(400, "Credentials auth is disabled")
 

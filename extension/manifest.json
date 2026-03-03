@@ -2,13 +2,15 @@
     "manifest_version": 3,
     "name": "MindVault",
     "version": "1.0.0",
-    "description": "AI-powered knowledge management — save and discover knowledge from any webpage",
+    "description": "Save anything to your AI-powered knowledge vault",
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "scripting"
     ],
     "host_permissions": [
-        "http://localhost:8000/*"
+        "http://localhost:8000/*",
+        "http://localhost:5173/*"
     ],
     "background": {
         "service_worker": "background.js"
@@ -22,16 +24,20 @@
                 "lib/Readability.js",
                 "content.js"
             ],
-            "css": [
-                "sidebar.css"
-            ]
+            "run_at": "document_idle"
         }
     ],
-    "icons": {
-        "48": "icons/icon48.svg",
-        "128": "icons/icon128.svg"
-    },
     "action": {
-        "default_title": "Toggle MindVault"
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
     }
 }

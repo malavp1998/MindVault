@@ -141,21 +141,48 @@ User pastes YouTube URL
 ```
 Content received
         ↓
-langdetect identifies language
+lingua detects language (more accurate than langdetect)
         ↓
     ┌──────────────────────────────────┐
     │  Indic? (hi/ta/te/kn/bn/ml/gu)  │
     └──────────┬───────────────────────┘
-               │ Yes              │ No
-               ▼                  ▼
-        Sarvam AI            Groq LLM
-        sarvam-2b       llama-3.1-8b-instant
-               │                  │
-               └────────┬─────────┘
-                         ▼
-              Jina AI Embeddings
-              (multilingual, both paths)
+               │ Yes                   │ No
+               ▼                       ▼
+    Gemini gemini-1.5-flash     Groq llama-3.3-70b-versatile
+               ↓ rate limited          ↓ rate limited
+    Sarvam sarvam-2b            Groq llama-3.1-8b-instant
+               ↓ also fails
+    Groq llama-3.1-8b-instant (last resort)
+               │                       │
+               └───────────┬───────────┘
+                            ▼
+               Jina AI jina-embeddings-v3
+               (multilingual, all paths)
 ```
+
+### LLM Fallback Chain
+
+MindVault never breaks when a free tier limit is hit.
+Every LLM call has an automatic fallback:
+
+```
+English content
+        ↓
+Groq llama-3.3-70b-versatile  ← best quality, 1000 req/day
+        ↓ 429 rate limited
+Groq llama-3.1-8b-instant     ← faster, 6000 req/day
+
+Indic content (Hindi, Telugu, Tamil etc.)
+        ↓
+Gemini gemini-1.5-flash       ← best Hindi quality, 1500 req/day
+        ↓ 429 rate limited
+Sarvam sarvam-2b              ← Indic specialist fallback
+        ↓ also rate limited
+Groq llama-3.1-8b-instant     ← last resort, handles Hindi decently
+```
+
+All fallback switching is automatic — no user action needed.
+App continues working even when multiple free tier limits are hit simultaneously.
 
 ---
 
@@ -167,12 +194,14 @@ langdetect identifies language
 | Database             | PostgreSQL 16                     | Note and topic storage               |
 | Vector Search        | pgvector 0.7                      | Cosine similarity search             |
 | ORM                  | SQLAlchemy async + asyncpg        | Database access layer                |
-| LLM English          | Groq `llama-3.1-8b-instant`       | Summarization, tagging, RAG          |
-| LLM Indic            | Sarvam AI `sarvam-2b`             | Hindi/Tamil/Telugu content           |
+| LLM English (primary)| Groq `llama-3.3-70b-versatile`    | Summarization, tagging, RAG — best quality |
+| LLM English (fallback)| Groq `llama-3.1-8b-instant`      | Auto fallback when 70b limit hits    |
+| LLM Indic (primary)  | Gemini `gemini-1.5-flash`         | Hindi/Tamil/Telugu — best Indic quality |
+| LLM Indic (fallback) | Sarvam AI `sarvam-2b`             | Auto fallback when Gemini limit hits |
 | Embeddings           | Jina AI `jina-embeddings-v3`      | Multilingual vector embeddings       |
 | Transcription        | Groq `whisper-large-v3-turbo`     | YouTube audio transcription          |
 | Clustering           | scikit-learn KMeans               | Auto topic organization              |
-| Language Detection   | langdetect                        | Route content to right LLM           |
+| Language Detection   | lingua                            | Route content to right LLM           |
 | MCP                  | FastMCP                           | Claude Desktop integration           |
 | Frontend             | React 18 + Vite + TailwindCSS v4  | Dashboard UI                         |
 | Graph View           | react-force-graph-2d + D3         | Obsidian-style knowledge graph       |
@@ -202,9 +231,10 @@ All free tier, no credit card required:
 
 | Service  | Get Key At                                                   | Used For                     |
 |----------|--------------------------------------------------------------|------------------------------|
-| Groq     | [console.groq.com](https://console.groq.com)                 | LLM + Whisper transcription  |
+| Groq     | [console.groq.com](https://console.groq.com)                 | LLM English (70b + 8b) + Whisper transcription |
+| Gemini   | [aistudio.google.com](https://aistudio.google.com)           | LLM Indic primary (Hindi, Telugu, Tamil) |
 | Jina AI  | [jina.ai](https://jina.ai)                                   | Embeddings — 1M free tokens  |
-| Sarvam AI| [dashboard.sarvam.ai](https://dashboard.sarvam.ai)           | Indic language LLM           |
+| Sarvam AI| [dashboard.sarvam.ai](https://dashboard.sarvam.ai)           | LLM Indic fallback only      |
 
 ### Step 2 — Clone and Configure
 
@@ -493,14 +523,16 @@ Claude: [calls summarize_topic("topic-uuid")]
 | Variable               | Default                                               | Description                              |
 |------------------------|-------------------------------------------------------|------------------------------------------|
 | `GROQ_API_KEY`         | —                                                     | Groq API key for LLM and Whisper         |
+| `LLM_ENGLISH_PRIMARY`  | `llama-3.3-70b-versatile`                             | Primary English model on Groq            |
+| `LLM_ENGLISH_FALLBACK` | `llama-3.1-8b-instant`                                | Fallback English model when primary limit hits |
+| `GEMINI_API_KEY`       | —                                                     | Google AI Studio key for Indic LLM       |
+| `LLM_INDIC_PRIMARY`    | `gemini-1.5-flash`                                    | Primary Indic language model             |
+| `SARVAM_API_KEY`       | —                                                     | Sarvam AI key — used as Indic fallback only |
+| `LLM_INDIC_FALLBACK`   | `sarvam-2b`                                           | Fallback Indic model when Gemini limit hits |
 | `JINA_API_KEY`         | —                                                     | Jina AI key for embeddings               |
-| `SARVAM_API_KEY`       | —                                                     | Sarvam AI key for Indic language LLM     |
 | `DATABASE_URL`         | `postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault` | PostgreSQL connection |
 | `RECLUSTER_EVERY_N`    | every note                                            | Re-cluster on every new note saved       |
-| `WHISPER_MODEL`        | `whisper-large-v3-turbo`                              | Groq Whisper model                       |
 | `EMBEDDING_MODEL`      | `jina-embeddings-v3`                                  | Jina embedding model                     |
-| `LLM_MODEL_EN`         | `llama-3.1-8b-instant`                                | Groq model for English content           |
-| `LLM_MODEL_INDIC`      | `sarvam-2b`                                           | Sarvam model for Indic languages         |
 
 ---
 
@@ -508,12 +540,14 @@ Claude: [calls summarize_topic("topic-uuid")]
 
 All AI in MindVault runs on free APIs. For a personal knowledge vault these limits are more than sufficient. A typical note save uses 2–3 LLM calls and 1 embedding call.
 
-| Service        | Model                     | Free Limit          | Resets    |
-|----------------|---------------------------|---------------------|-----------|
-| Groq LLM       | `llama-3.1-8b-instant`    | 6,000 req/day       | Daily     |
-| Groq Whisper   | `whisper-large-v3-turbo`  | 2 hours audio/day   | Daily     |
-| Sarvam AI      | `sarvam-2b`               | See dashboard       | —         |
-| Jina Embeddings| `jina-embeddings-v3`      | 1M tokens           | One time  |
+| Service        | Model                     | Role             | Free Limit          | Resets    |
+|----------------|---------------------------|------------------|---------------------|-----------|
+| Groq           | `llama-3.3-70b-versatile` | English primary  | 1,000 req/day       | Daily     |
+| Groq           | `llama-3.1-8b-instant`    | English fallback | 6,000 req/day       | Daily     |
+| Gemini         | `gemini-1.5-flash`        | Indic primary    | 1,500 req/day       | Daily     |
+| Sarvam AI      | `sarvam-2b`               | Indic fallback   | See dashboard       | —         |
+| Groq           | `whisper-large-v3-turbo`  | Transcription    | 2 hours audio/day   | Daily     |
+| Jina AI        | `jina-embeddings-v3`      | Embeddings       | 1M tokens           | One time  |
 
 ---
 
@@ -526,10 +560,10 @@ This project was built as a portfolio piece showcasing AI engineering skills:
 | RAG                    | `/search` — pgvector retrieval + LLM synthesis with citations             |
 | Vector Embeddings      | Jina AI embeddings stored in pgvector                                     |
 | Semantic Search        | Cosine similarity via pgvector `<=>` operator                             |
-| LLM Orchestration      | Summarization, tagging, RAG, topic naming                                 |
+| LLM Orchestration      | Smart routing with primary/fallback chain — Groq 70b + 8b for English, Gemini + Sarvam for Indic |
 | Agentic Pipeline       | Async note processing pipeline triggered on every save                    |
 | MCP Integration        | FastMCP server with 5 tools for Claude Desktop                            |
-| Multilingual AI        | langdetect + Groq and Sarvam routing                                      |
+| Multilingual AI        | lingua detection + Groq, Gemini, and Sarvam routing with auto fallback    |
 | Chrome Extension       | Manifest V3 with content scripts and sidebar                              |
 | Clustering & ML        | KMeans + silhouette scoring for auto topic detection                      |
 | Graph Visualization    | Force-directed graph with react-force-graph-2d                            |
