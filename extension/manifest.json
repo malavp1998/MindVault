@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "MindVault",
-    "version": "1.0.0",
-    "description": "Save anything to your AI-powered knowledge vault",
+    "name": "MindVault — AI Second Brain",
+    "version": "1.0",
+    "description": "Save any webpage to your AI-powered knowledge vault. Search, relate, and rediscover your saved notes using semantic AI.",
     "permissions": [
         "activeTab",
         "storage",
@@ -10,7 +10,8 @@
     ],
     "host_permissions": [
         "http://localhost:8000/*",
-        "http://localhost:5173/*"
+        "http://localhost:5173/*",
+        "https://*.onrender.com/*"
     ],
     "background": {
         "service_worker": "background.js"
