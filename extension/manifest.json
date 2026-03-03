@@ -8,26 +8,9 @@
         "storage",
         "scripting"
     ],
-    "host_permissions": [
-        "http://localhost:8000/*",
-        "http://localhost:5173/*",
-        "https://*.onrender.com/*"
-    ],
     "background": {
         "service_worker": "background.js"
     },
-    "content_scripts": [
-        {
-            "matches": [
-                "<all_urls>"
-            ],
-            "js": [
-                "lib/Readability.js",
-                "content.js"
-            ],
-            "run_at": "document_idle"
-        }
-    ],
     "action": {
         "default_popup": "popup.html",
         "default_icon": {
