@@ -1,4 +1,4 @@
-const API_BASE = "https://mindvault-backend-p38e.onrender.com"
+const API_BASE = "https://mindvault-wspy.onrender.com"
 
 // ── TOKEN MANAGEMENT ──────────────────────────────────
 
