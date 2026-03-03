@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000"
+const API_BASE = "https://mindvault-backend-p38e.onrender.com"
 
 // ── TOKEN MANAGEMENT ──────────────────────────────────
 
