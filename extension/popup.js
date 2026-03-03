@@ -323,7 +323,7 @@ function createNoteCard(note, similarity) {
     // open note in dashboard on click
     card.addEventListener("click", () => {
         chrome.tabs.create({
-            url: `http://localhost:5173/note/${note.id}`
+            url: `https://mind-vault-ecru.vercel.app/note/${note.id}`
         })
     })
     return card
