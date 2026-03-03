@@ -6,6 +6,7 @@ import VaultPage from './pages/VaultPage';
 import TopicsPage from './pages/TopicsPage';
 import NotePage from './pages/NotePage';
 import SearchPage from './pages/SearchPage';
+import ChatPage from './pages/ChatPage';
 
 function Sidebar() {
     const { user, logout } = useAuth();
@@ -25,6 +26,9 @@ function Sidebar() {
                 </NavLink>
                 <NavLink to="/search" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                     <span className="icon">🔍</span> Search
+                </NavLink>
+                <NavLink to="/chat" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <span className="icon">💬</span> Chat
                 </NavLink>
             </div>
             {/* User info at bottom */}
@@ -52,6 +56,7 @@ function AuthenticatedLayout() {
                     <Route path="/topics" element={<TopicsPage />} />
                     <Route path="/note/:id" element={<NotePage />} />
                     <Route path="/search" element={<SearchPage />} />
+                    <Route path="/chat" element={<ChatPage />} />
                 </Routes>
             </main>
         </div>

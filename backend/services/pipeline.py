@@ -12,6 +12,7 @@ from services.llm import generate_summary, extract_concepts
 from services.language import detect_language
 from services.tagging import generate_tags
 from services.clustering import cluster_notes
+from services.semantic_cache import invalidate_user_cache
 import asyncio
 from config import get_settings
 from database import async_session
@@ -95,9 +96,14 @@ async def process_note(note_id: uuid.UUID) -> None:
             
             logger.info(f"✅ Successfully processed note: {title}")
             
+            # --- Invalidate user's RAG and chat cache (vault changed) ---
+            note_user_id = note.user_id
+            if note_user_id:
+                await invalidate_user_cache(str(note_user_id), cache_key="rag")
+                await invalidate_user_cache(str(note_user_id), cache_key="chat")
+
             # --- Auto Clustering ---
             # Fire-and-forget background task to re-run KMeans (scoped to user)
-            note_user_id = note.user_id
             if note_user_id:
                 asyncio.create_task(cluster_notes(user_id=note_user_id))
             else:

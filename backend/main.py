@@ -11,8 +11,11 @@ from routes.auth import router as auth_router
 from routes.notes import router as notes_router
 from routes.topics import router as topics_router
 from routes.graph import router as graph_router
+from routes.chat import router as chat_router
+from routes.cache import router as cache_router
 from routes.auth import limiter
 from mcp_server import mcp
+from services.semantic_cache import cleanup_expired_cache
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -27,6 +30,8 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MindVault...")
     await init_db()
     logger.info("✅ Database initialized with pgvector extension")
+    await cleanup_expired_cache()
+    logger.info("🧹 Expired cache cleaned on startup")
     yield
     logger.info("👋 MindVault shutting down")
 
@@ -56,6 +61,8 @@ app.include_router(auth_router)           # /auth/* — public (no JWT)
 app.include_router(notes_router, prefix="/api")
 app.include_router(topics_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
+app.include_router(cache_router, prefix="/api")
 
 # MCP server mount
 app.mount("/mcp", mcp.streamable_http_app())

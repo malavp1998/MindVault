@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     # OTP settings (only used if auth_method="otp")
     otp_expire_minutes: int = 10
 
+    # Semantic Cache
+    cache_similarity_threshold: float = 0.80
+    cache_ttl_summary_hours: int = 24
+    cache_ttl_tags_hours: int = 48
+    cache_ttl_topic_name_hours: int = 72
+    cache_ttl_rag_hours: int = 6
+    cache_ttl_chat_hours: int = 1
+
     # App
     backend_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:5173"

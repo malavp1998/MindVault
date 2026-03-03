@@ -42,6 +42,7 @@ class User(Base):
     # Relationships
     notes: Mapped[List["Note"]] = relationship("Note", back_populates="owner", cascade="all, delete-orphan")
     topics: Mapped[List["Topic"]] = relationship("Topic", back_populates="owner", cascade="all, delete-orphan")
+    chat_sessions: Mapped[List["ChatSession"]] = relationship("ChatSession", back_populates="owner", cascade="all, delete-orphan")
 
 
 class OTPVerification(Base):
@@ -147,3 +148,76 @@ class NoteLink(Base):
     # Relationships
     source: Mapped["Note"] = relationship("Note", foreign_keys=[source_id], back_populates="outgoing_links")
     target: Mapped["Note"] = relationship("Note", foreign_keys=[target_id], back_populates="incoming_links")
+
+
+# ─── Chat Models ───────────────────────────────────────────────
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), default="New Chat")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    owner: Mapped["User"] = relationship("User", back_populates="chat_sessions")
+    messages: Mapped[List["ChatMessage"]] = relationship(
+        "ChatMessage", back_populates="session", cascade="all, delete-orphan",
+        order_by="ChatMessage.created_at"
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" or "assistant"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    cited_note_ids: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relationships
+    session: Mapped["ChatSession"] = relationship("ChatSession", back_populates="messages")
+
+
+# ─── Semantic Cache ────────────────────────────────────────────
+
+class SemanticCache(Base):
+    __tablename__ = "semantic_cache"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    cache_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    query_embedding = mapped_column(Vector(1536), nullable=True)
+    response: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    hit_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

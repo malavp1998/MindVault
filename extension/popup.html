@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MindVault</title>
     <link rel="stylesheet" href="popup.css" />
 </head>
+
 <body>
     <div id="app">
         <!-- LOGIN SCREEN -->
@@ -16,16 +18,13 @@
                 <p>Login to your vault</p>
             </div>
             <div class="form">
-                <input id="login-username" type="text"
-                    placeholder="Username" class="input" />
-                <input id="login-password" type="password"
-                    placeholder="Password" class="input" />
+                <input id="login-username" type="text" placeholder="Username" class="input" />
+                <input id="login-password" type="password" placeholder="Password" class="input" />
                 <div id="login-error" class="error hidden"></div>
                 <button id="btn-login" class="btn btn-primary">Login</button>
                 <p class="hint">
                     New user? Register at
-                    <a href="http://localhost:5173/login"
-                        target="_blank">localhost:5173</a>
+                    <a href="http://localhost:5173/login" target="_blank">localhost:5173</a>
                 </p>
             </div>
         </div>
@@ -45,11 +44,11 @@
                 <button id="btn-logout" class="btn-icon" title="Logout">⏻</button>
             </div>
 
-            <!-- Tabs -->
             <div class="tabs">
                 <button class="tab active" data-tab="save">Save</button>
                 <button class="tab" data-tab="related">Related</button>
                 <button class="tab" data-tab="search">Search</button>
+                <button class="tab" data-tab="chat">Chat</button>
             </div>
 
             <!-- SAVE TAB -->
@@ -69,8 +68,7 @@
                         <p id="page-url" class="page-url"></p>
                     </div>
                     <textarea id="annotation" class="textarea"
-                        placeholder="Add your thoughts or annotation (optional)..."
-                        rows="3"></textarea>
+                        placeholder="Add your thoughts or annotation (optional)..." rows="3"></textarea>
                     <input id="user-tags" type="text" class="input"
                         placeholder="Tags (comma separated): ai, learning" />
                     <button id="btn-save-page" class="btn btn-primary">
@@ -100,8 +98,7 @@
             <!-- SEARCH TAB -->
             <div id="tab-search" class="tab-content hidden">
                 <div class="search-box">
-                    <input id="search-input" type="text" class="input"
-                        placeholder="Ask your vault anything..." />
+                    <input id="search-input" type="text" class="input" placeholder="Ask your vault anything..." />
                     <button id="btn-search" class="btn btn-primary">Search</button>
                 </div>
                 <div id="search-loading" class="loader-sm hidden"></div>
@@ -109,8 +106,19 @@
                 <div id="search-sources" class="note-list"></div>
             </div>
 
+            <!-- CHAT TAB -->
+            <div id="tab-chat" class="tab-content hidden">
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input-row">
+                    <input id="chat-input" type="text" class="input" placeholder="Ask your vault..." />
+                    <button id="btn-chat-send" class="btn btn-primary"
+                        style="padding: 8px 14px; min-width: auto;">↑</button>
+                </div>
+            </div>
+
         </div>
     </div>
     <script src="popup.js"></script>
 </body>
+
 </html>

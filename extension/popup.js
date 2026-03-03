@@ -2,6 +2,7 @@
 let currentTab = null
 let isYoutube = false
 let listenersSetup = false
+let chatSessionId = null
 
 // ── INIT ──────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
@@ -86,6 +87,12 @@ function setupListeners() {
         .addEventListener("click", handleSearch)
     document.getElementById("search-input")
         .addEventListener("keydown", e => { if (e.key === "Enter") handleSearch() })
+
+    // chat
+    document.getElementById("btn-chat-send")
+        .addEventListener("click", handleChatSend)
+    document.getElementById("chat-input")
+        .addEventListener("keydown", e => { if (e.key === "Enter") handleChatSend() })
 }
 
 // ── AUTH ──────────────────────────────────────────────
@@ -337,6 +344,52 @@ function escapeHtml(str) {
 function showError(el, msg) {
     el.textContent = msg
     el.classList.remove("hidden")
+}
+
+// ── CHAT ──────────────────────────────────────────────
+async function handleChatSend() {
+    const input = document.getElementById("chat-input")
+    const query = input.value.trim()
+    if (!query) return
+
+    input.value = ""
+    appendChatMessage("user", query)
+
+    const btn = document.getElementById("btn-chat-send")
+    btn.disabled = true
+
+    const result = await sendMessage({
+        type: "CHAT",
+        message: query,
+        sessionId: chatSessionId
+    })
+
+    btn.disabled = false
+
+    if (result?.ok) {
+        chatSessionId = result.data.session_id
+        appendChatMessage("assistant", result.data.answer, result.data.cited_notes)
+    } else {
+        appendChatMessage("assistant", "Sorry, something went wrong.")
+    }
+}
+
+function appendChatMessage(role, content, citedNotes = []) {
+    const container = document.getElementById("chat-messages")
+    const div = document.createElement("div")
+    div.className = `chat-msg chat-msg-${role}`
+    div.innerHTML = `
+        <div class="chat-bubble">${escapeHtml(content)}</div>
+        ${citedNotes.length > 0 ? `
+            <div class="chat-sources">
+                ${citedNotes.slice(0, 3).map(n =>
+        `<span class="tag tag-auto">${escapeHtml((n.title || "Note").slice(0, 25))}</span>`
+    ).join("")}
+            </div>
+        ` : ""}
+    `
+    container.appendChild(div)
+    container.scrollTop = container.scrollHeight
 }
 
 // ── MESSAGE HELPER ────────────────────────────────────

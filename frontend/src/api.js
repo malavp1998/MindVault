@@ -62,4 +62,18 @@ export const getTopic = (id) =>
 export const summarizeTopic = (id) =>
     api.post(`/topics/${id}/summarize`).then(r => r.data);
 
+// ─── Chat ──────────────────────────────────────────────────────
+
+export const getChatSessions = () =>
+    api.get('/chat/sessions').then(r => r.data);
+
+export const getChatMessages = (sessionId) =>
+    api.get(`/chat/sessions/${sessionId}/messages`).then(r => r.data);
+
+export const sendChatMessage = (message, sessionId = null) =>
+    api.post('/chat/message', { message, session_id: sessionId }).then(r => r.data);
+
+export const deleteChatSession = (sessionId) =>
+    api.delete(`/chat/sessions/${sessionId}`);
+
 export default api;
