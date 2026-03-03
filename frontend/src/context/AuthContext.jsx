@@ -9,8 +9,9 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         if (token) {
+            const API = import.meta.env.VITE_API_URL || '';
             // Verify token is still valid
-            fetch("/auth/me", {
+            fetch(`${API}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` },
             })
                 .then((r) => (r.ok ? r.json() : null))

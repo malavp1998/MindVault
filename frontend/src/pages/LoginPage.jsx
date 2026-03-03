@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 import '../index.css'
 
+const API = import.meta.env.VITE_API_URL || ''
+
 export default function LoginPage() {
     const [tab, setTab] = useState("login")   // login | register
     const [form, setForm] = useState({ username: "", email: "", password: "" })
@@ -22,7 +24,7 @@ export default function LoginPage() {
             : { username: form.username, email: form.email, password: form.password }
 
         try {
-            const res = await fetch(endpoint, {
+            const res = await fetch(`${API}${endpoint}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body)

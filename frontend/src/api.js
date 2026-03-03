@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-    baseURL: '/api',
+    baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
     timeout: 120000,
 });
 
@@ -25,6 +25,17 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
+
+// Auth API (separate from /api prefix)
+export const authApi = axios.create({
+    baseURL: import.meta.env.VITE_API_URL || '',
+    timeout: 30000,
+});
+authApi.interceptors.request.use(config => {
+    const token = localStorage.getItem('mv_token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+});
 
 // ─── Notes ─────────────────────────────────────────────────────
 
