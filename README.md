@@ -4,6 +4,14 @@
 
 > MindVault is an AI-powered knowledge management system that automatically captures, summarizes, tags, and semantically links everything you read — like Obsidian meets RAG meets getrecall.ai
 
+### 🌐 Live Demo
+
+| | URL |
+|---|---|
+| **Dashboard** | [mind-vault-ecru.vercel.app](https://mind-vault-ecru.vercel.app) |
+| **Backend API** | [mindvault-wspy.onrender.com/docs](https://mindvault-wspy.onrender.com/docs) |
+| **Chrome Extension** | [Chrome Web Store](https://chrome.google.com/webstore) *(pending review)* |
+
 ---
 
 ## 📸 Screenshots
@@ -46,7 +54,10 @@
 - 🏷️ **Intelligent Auto-Tagging** — LLM generates 3-5 relevant tags per note. User can approve, reject, or add custom tags manually
 - 🗂️ **Self-Organizing Topics** — Notes automatically cluster into topics using KMeans on embeddings. Topics regenerate silently after every new note saved
 - 🔍 **Semantic Search + RAG** — Natural language search powered by pgvector cosine similarity. Returns a synthesized answer with cited source note cards
-- 🌐 **Chrome Extension** — Floating sidebar on any webpage to save content, add annotations, and see related notes from your vault inline while browsing
+- 🌐 **Chrome Extension** — Popup-based extension to save any webpage, add annotations/tags, search your vault, and view related notes. No sidebar injection — works via toolbar icon click
+- 💬 **AI Chat** — Chat with your vault. Ask questions and get answers grounded in your saved notes with full conversation history
+- 🔐 **Authentication** — JWT-based auth with login/register. Per-user data isolation — each user sees only their own notes
+- ⚡ **Semantic Cache** — LLM responses cached by semantic similarity. Repeated or similar queries return instantly without API calls
 - 📺 **YouTube Summarizer** — Paste any YouTube URL. Fetches captions or transcribes audio via Groq Whisper API, then summarizes and saves as a note. Temp audio deleted immediately after transcription
 - 🌍 **Multilingual Support** — Detects language automatically. Routes Indic language content (Hindi, Tamil, Telugu, Kannada etc.) to Sarvam AI, English to Groq LLM
 - 🕸️ **Obsidian-Style Graph View** — Interactive force-directed graph showing topics as large purple nodes, notes as smaller nodes, connected by shared tags and topic membership. Hover to highlight, click to explore
@@ -113,11 +124,13 @@ User types natural language query
             ↓
     pgvector finds top-5 similar notes (cosine similarity <=>)
             ↓
-    Retrieved notes stuffed into LLM prompt as context
+    [If synthesize=true] Notes used as context for LLM answer
             ↓
     LLM synthesizes answer grounded in YOUR notes only
             ↓
     Response returned with cited source note cards
+
+    [If synthesize=false] Direct vector results returned instantly (no LLM)
 ```
 
 ### YouTube Summarization Flow
@@ -320,6 +333,8 @@ make dev-frontend
 4. Select the `extension/` folder
 5. Pin the MindVault icon to your toolbar
 
+> **Note:** For local development the extension points to `localhost:8000`. For production deployment, update `API_BASE` in `extension/background.js` and the register link in `extension/popup.html` to your production URLs.
+
 ### Step 5 — Connect Claude Desktop (optional)
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
@@ -335,6 +350,51 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```
 
 Restart Claude Desktop. You can now ask Claude to search your vault, add notes, and summarize topics directly.
+
+---
+
+## ☁️ Production Deployment
+
+Deploy the full stack using **100% free tiers** — no credit card needed.
+
+| Layer | Service | Free Limit |
+|---|---|---|
+| **Database** | [Neon](https://neon.tech) (PostgreSQL + pgvector) | 512 MB storage |
+| **Backend** | [Render](https://render.com) (Docker) | 512 MB RAM, sleeps after 15min idle |
+| **Frontend** | [Vercel](https://vercel.com) (Vite/React) | Unlimited deploys |
+| **Extension** | Chrome Web Store | $5 one-time developer fee |
+
+### Database — Neon
+
+1. Sign up at [neon.tech](https://neon.tech)
+2. Create project → copy connection string
+3. Run `CREATE EXTENSION IF NOT EXISTS vector;` in SQL editor
+4. Convert URL: `postgresql://` → `postgresql+asyncpg://`
+
+> **Important:** asyncpg doesn't support `?sslmode=require` query params. MindVault's `database.py` auto-strips these and passes `ssl=True` via `connect_args`.
+
+### Backend — Render
+
+1. Sign up at [render.com](https://render.com) → New Web Service → connect GitHub
+2. Set **Root Directory** to `backend`, **Runtime** to Docker
+3. Add all environment variables from `.env` (use Neon URL for `DATABASE_URL`)
+4. Deploy — tables auto-create on startup via `init_db()`
+
+### Frontend — Vercel
+
+1. Sign up at [vercel.com](https://vercel.com) → Import GitHub repo
+2. Set **Root Directory** to `frontend`, **Framework** to `Vite`
+3. Add env var: `VITE_API_URL` = `https://your-app.onrender.com`
+4. Deploy
+
+The frontend uses `VITE_API_URL` to route API calls to the Render backend in production. Locally it falls back to `/api` which Vite proxies to Docker.
+
+### Chrome Extension
+
+1. Update `API_BASE` in `extension/background.js` to your Render URL
+2. Update register link in `extension/popup.html` to your Vercel URL
+3. Zip the `extension/` folder → upload to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
+4. Category: **Productivity**
 
 ---
 
@@ -360,7 +420,7 @@ Restart Claude Desktop. You can now ask Claude to search your vault, add notes, 
 
 ### Searching Your Vault
 
-1. Open dashboard at [localhost:5173](http://localhost:5173)
+1. Open dashboard at [localhost:5173](http://localhost:5173) (or your Vercel URL)
 2. Go to `/search`
 3. Ask in natural language: *"what did I learn about transformer attention mechanisms?"*
 4. Get a synthesized RAG answer with cited source note cards
@@ -471,6 +531,9 @@ Returns full node and link data for the Obsidian-style graph view.
 
 | Method   | Path                          | Description                          |
 |----------|-------------------------------|--------------------------------------|
+| `POST`   | `/auth/register`              | Register a new user                  |
+| `POST`   | `/auth/login`                 | Login and get JWT token              |
+| `GET`    | `/auth/me`                    | Get current user info                |
 | `POST`   | `/api/notes`                  | Create a new note                    |
 | `GET`    | `/api/notes`                  | List all notes (filterable)          |
 | `GET`    | `/api/notes/search?q=`        | Semantic search + optional RAG       |
@@ -480,11 +543,16 @@ Returns full node and link data for the Obsidian-style graph view.
 | `PATCH`  | `/api/notes/{id}/tags`        | Update user tags                     |
 | `POST`   | `/api/notes/{id}/suggest-tags`| AI tag suggestions                   |
 | `DELETE` | `/api/notes/{id}`             | Delete a note                        |
+| `POST`   | `/api/notes/youtube`          | Summarize + save YouTube video       |
 | `GET`    | `/api/topics`                 | List topic clusters                  |
 | `GET`    | `/api/topics/{id}`            | Get topic with notes                 |
 | `POST`   | `/api/topics/recluster`       | Trigger KMeans re-clustering         |
 | `POST`   | `/api/topics/{id}/summarize`  | AI topic summary                     |
 | `GET`    | `/api/graph/data`             | Graph nodes + links for graph view   |
+| `POST`   | `/api/chat`                   | Chat with your vault (RAG)           |
+| `GET`    | `/api/chat/sessions`          | List chat sessions                   |
+| `GET`    | `/api/cache/stats`            | Semantic cache statistics            |
+| `GET`    | `/health`                     | Health check                         |
 
 ---
 
@@ -531,8 +599,13 @@ Claude: [calls summarize_topic("topic-uuid")]
 | `LLM_INDIC_FALLBACK`   | `sarvam-2b`                                           | Fallback Indic model when Gemini limit hits |
 | `JINA_API_KEY`         | —                                                     | Jina AI key for embeddings               |
 | `DATABASE_URL`         | `postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault` | PostgreSQL connection |
+| `JWT_SECRET_KEY`       | —                                                     | Secret for JWT token generation          |
+| `JWT_ALGORITHM`        | `HS256`                                               | JWT signing algorithm                    |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `10080`                                  | Token expiry (7 days default)            |
+| `AUTH_METHOD`          | `credentials`                                         | Authentication method                    |
 | `RECLUSTER_EVERY_N`    | every note                                            | Re-cluster on every new note saved       |
 | `EMBEDDING_MODEL`      | `jina-embeddings-v3`                                  | Jina embedding model                     |
+| `VITE_API_URL`         | —                                                     | Frontend env: production backend URL     |
 
 ---
 
@@ -564,7 +637,10 @@ This project was built as a portfolio piece showcasing AI engineering skills:
 | Agentic Pipeline       | Async note processing pipeline triggered on every save                    |
 | MCP Integration        | FastMCP server with 5 tools for Claude Desktop                            |
 | Multilingual AI        | lingua detection + Groq, Gemini, and Sarvam routing with auto fallback    |
-| Chrome Extension       | Manifest V3 with content scripts and sidebar                              |
+| Chrome Extension       | Manifest V3 popup-based extension (activeTab + scripting)                 |
+| Authentication         | JWT-based auth with per-user data isolation                               |
+| Semantic Caching       | LLM response caching by semantic similarity to reduce API calls           |
+| Cloud Deployment       | Neon (DB) + Render (backend) + Vercel (frontend) — full free-tier stack   |
 | Clustering & ML        | KMeans + silhouette scoring for auto topic detection                      |
 | Graph Visualization    | Force-directed graph with react-force-graph-2d                            |
 | Async Backend          | FastAPI + SQLAlchemy async + asyncpg                                      |
@@ -577,44 +653,58 @@ This project was built as a portfolio piece showcasing AI engineering skills:
 ```
 mindvault/
 ├── backend/
-│   ├── main.py                # FastAPI app entry + router registration
-│   ├── config.py              # Pydantic settings
-│   ├── database.py            # Async SQLAlchemy + pgvector setup
-│   ├── models.py              # Note, Topic, NoteLink ORM models
+│   ├── main.py                # FastAPI app entry + CORS + router registration
+│   ├── config.py              # Pydantic settings (env vars)
+│   ├── database.py            # Async SQLAlchemy + pgvector + SSL handling
+│   ├── models.py              # Note, Topic, NoteLink, User, ChatSession ORM models
 │   ├── schemas.py             # Request/response Pydantic schemas
-│   ├── mcp_server.py          # MCP server (5 tools)
+│   ├── mcp_server.py          # MCP server (5 tools for Claude Desktop)
+│   ├── Dockerfile             # Python 3.12 + ffmpeg production image
 │   ├── routes/
-│   │   ├── notes.py           # Note CRUD + search + tag management
+│   │   ├── auth.py            # JWT auth — login, register, rate limiting
+│   │   ├── notes.py           # Note CRUD + search + RAG + tag management
 │   │   ├── topics.py          # Topic endpoints + recluster
-│   │   └── graph.py           # Graph data endpoint
+│   │   ├── graph.py           # Graph data endpoint
+│   │   ├── chat.py            # Chat with vault (multi-turn RAG)
+│   │   └── cache.py           # Semantic cache stats endpoint
 │   └── services/
-│       ├── embedding.py       # Jina AI embeddings
-│       ├── llm.py             # Groq + Sarvam LLM routing
+│       ├── embedding.py       # Jina AI embeddings (padded to 1536d)
+│       ├── llm.py             # Smart LLM routing + fallback chain
+│       ├── agent.py           # RAG agent (LangGraph: search → synthesize)
+│       ├── chat.py            # Chat service with conversation history
+│       ├── semantic_cache.py  # Semantic similarity caching for LLM responses
 │       ├── clustering.py      # KMeans + silhouette scoring
 │       ├── tagging.py         # Auto-tag generation
 │       ├── transcription.py   # Groq Whisper + yt-dlp
-│       ├── language.py        # Language detection
+│       ├── language.py        # lingua-based language detection
 │       └── pipeline.py        # AI processing orchestration
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx            # Routes + navigation
-│   │   ├── api.js             # Axios API client
-│   │   ├── index.css          # Design system (dark theme)
+│   │   ├── App.jsx            # Routes + navigation + auth guard
+│   │   ├── api.js             # Axios API client (VITE_API_URL aware)
+│   │   ├── index.css          # Design system (dark theme + TailwindCSS v4)
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx # JWT auth state management
 │   │   ├── components/
 │   │   │   └── GraphView.jsx  # Obsidian-style force graph canvas
 │   │   └── pages/
-│   │       ├── VaultPage.jsx   # Masonry note grid
+│   │       ├── LoginPage.jsx   # Login / Register page
+│   │       ├── VaultPage.jsx   # Masonry note grid dashboard
 │   │       ├── TopicsPage.jsx  # Interactive graph view + side panel
 │   │       ├── NotePage.jsx    # Note detail + auto/user tags + backlinks
-│   │       └── SearchPage.jsx  # Semantic search + RAG answer
+│   │       ├── SearchPage.jsx  # Semantic search + optional RAG answer
+│   │       └── ChatPage.jsx    # Chat with your vault
+│   ├── Dockerfile             # Node.js dev server image
 │   └── package.json
 ├── extension/
-│   ├── manifest.json          # Manifest V3
-│   ├── content.js             # Sidebar injection + note saving
-│   ├── background.js          # Service worker
-│   ├── sidebar.css            # Dark theme sidebar styles
+│   ├── manifest.json          # Manifest V3 (activeTab + scripting)
+│   ├── popup.html             # Extension popup UI
+│   ├── popup.js               # Popup logic (save, search, related)
+│   ├── popup.css              # Dark theme popup styles
+│   ├── background.js          # Service worker (API calls)
 │   └── lib/Readability.js     # Article content extraction
-├── docker-compose.yml
+├── docker-compose.yml         # Full stack: postgres + backend + frontend
+├── Makefile                   # Convenience commands
 ├── .env.example
 └── README.md
 ```
