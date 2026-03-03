@@ -9,12 +9,17 @@ from config import get_settings
 
 settings = get_settings()
 
-# asyncpg doesn't support ?sslmode= query param — strip it and use connect_args instead
-_db_url = settings.database_url
-_connect_args = {}
-if "sslmode=require" in _db_url:
-    _db_url = _db_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
-    _connect_args = {"ssl": True}
+# asyncpg doesn't support query params like ?sslmode=require&channel_binding=require
+# Strip ALL query params from the URL and pass ssl=True via connect_args instead
+from urllib.parse import urlparse, urlunparse
+
+_raw_url = settings.database_url
+_parsed = urlparse(_raw_url)
+_needs_ssl = bool(_parsed.query)  # any query params → cloud DB → needs SSL
+
+# Rebuild URL without query string
+_db_url = urlunparse(_parsed._replace(query=""))
+_connect_args = {"ssl": True} if _needs_ssl else {}
 
 engine = create_async_engine(
     _db_url,
