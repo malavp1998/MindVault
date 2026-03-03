@@ -240,15 +240,11 @@ async def search_notes(
     rag = None
     if synthesize:
         try:
-            # The agent handles routing, searching, grading, rewriting, and synthesis internally
             initial_state = {
                 "query": q,
-                "rewritten_query": "",
                 "retrieved_notes": [],
-                "relevance_score": 0.0,
                 "final_answer": "",
                 "sources": [],
-                "retry_count": 0,
                 "user_id": str(current_user.id),
             }
             final_state = await rag_agent.ainvoke(initial_state)
@@ -256,13 +252,12 @@ async def search_notes(
                 answer=final_state.get("final_answer", ""),
                 sources=final_state.get("sources", [])
             )
-            # The agent already searched, so we can override the basic search_results
-            # just to ensure they match exactly what the agent saw.
             if final_state.get("sources"):
                 search_results = final_state["sources"]
         except Exception as e:
             print(f"RAG Agent Error: {e}")
             pass  # Gracefully degrade if LLM / Agent fails
+
 
     query_lang = detect_language(q)
     return SearchResponse(results=search_results, rag=rag, query_language=query_lang)

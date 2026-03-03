@@ -7,7 +7,7 @@ export default function SearchPage() {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [synthesize, setSynthesize] = useState(true);
+    const [synthesize, setSynthesize] = useState(false);
     const navigate = useNavigate();
 
     const handleSearch = useCallback(async (e) => {

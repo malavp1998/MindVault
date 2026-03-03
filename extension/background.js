@@ -179,15 +179,6 @@ async function handleMessage(message) {
             const user = await getUser()
             return { user }
 
-        case "CHAT":
-            return await apiCall("/api/chat/message", {
-                method: "POST",
-                body: JSON.stringify({
-                    message: message.message,
-                    session_id: message.sessionId || null
-                })
-            })
-
         default:
             return { error: "Unknown message type" }
     }
