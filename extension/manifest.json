@@ -8,6 +8,9 @@
         "storage",
         "scripting"
     ],
+    "host_permissions": [
+        "https://mindvault-wspy.onrender.com/*"
+    ],
     "background": {
         "service_worker": "background.js"
     },

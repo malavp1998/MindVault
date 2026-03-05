@@ -217,26 +217,38 @@ async function handleSummarizeYoutube() {
     btn.disabled = true
     btn.textContent = "Summarizing..."
 
-    const result = await sendMessage({
-        type: "SUMMARIZE_YOUTUBE",
-        videoUrl: currentTab?.url,
-        annotation
-    })
+    try {
+        const result = await sendMessage({
+            type: "SUMMARIZE_YOUTUBE",
+            videoUrl: currentTab?.url,
+            annotation
+        })
 
-    btn.disabled = false
-    btn.textContent = "Summarize & Save"
+        btn.disabled = false
+        btn.textContent = "Summarize & Save"
 
-    if (result?.ok) {
-        document.getElementById("save-form").classList.add("hidden")
-        document.getElementById("youtube-banner").classList.add("hidden")
-        const resultEl = document.getElementById("save-result")
-        resultEl.classList.remove("hidden")
-        const tagsEl = document.getElementById("result-tags")
-        const note = result.data
-        tagsEl.innerHTML = (note.auto_tags || [])
-            .map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`).join("")
-    } else if (result?.status === 401) {
-        showScreen("login")
+        if (result?.ok) {
+            document.getElementById("save-form").classList.add("hidden")
+            document.getElementById("youtube-banner").classList.add("hidden")
+            const resultEl = document.getElementById("save-result")
+            resultEl.classList.remove("hidden")
+            const tagsEl = document.getElementById("result-tags")
+            const note = result.data
+            tagsEl.innerHTML = (note.auto_tags || [])
+                .map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`).join("")
+        } else if (result?.status === 401) {
+            showScreen("login")
+        } else {
+            // API returned an error — show it to the user
+            const errorMsg = result?.data?.detail || "Failed to summarize video. Please try again."
+            alert(`❌ ${errorMsg}`)
+        }
+    } catch (err) {
+        // network error or service worker issue
+        btn.disabled = false
+        btn.textContent = "Summarize & Save"
+        alert("❌ Could not reach MindVault server. Check your connection and try again.")
+        console.error("[MindVault] YouTube summarize error:", err)
     }
 }
 
