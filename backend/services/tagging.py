@@ -4,11 +4,13 @@ from __future__ import annotations
 from services.llm import llm_complete
 from services.language import is_indic
 from services.semantic_cache import get_cached_response, set_cached_response
+from langsmith import traceable
 from config import get_settings
 
 settings = get_settings()
 
 
+@traceable(name="generate_tags", tags=["pipeline", "tagging"])
 async def generate_tags(content: str, lang: str) -> list[str]:
     """Uses LLM to automatically generate 3-5 relevant tags for the note content."""
     cache_query = content[:500]

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 from openai import AsyncOpenAI
+from langsmith.wrappers import wrap_openai
+from langsmith import traceable
 from config import get_settings
 from services.language import detect_language, is_indic
 from services.semantic_cache import get_cached_response, set_cached_response
@@ -20,10 +22,10 @@ def _get_groq_client() -> AsyncOpenAI:
     """Groq client for English LLM."""
     global _groq_client
     if _groq_client is None:
-        _groq_client = AsyncOpenAI(
+        _groq_client = wrap_openai(AsyncOpenAI(
             api_key=settings.groq_api_key,
             base_url="https://api.groq.com/openai/v1"
-        )
+        ))
     return _groq_client
 
 
@@ -31,10 +33,10 @@ def _get_gemini_client() -> AsyncOpenAI:
     """Gemini client for Indic LLM (primary)."""
     global _gemini_client
     if _gemini_client is None:
-        _gemini_client = AsyncOpenAI(
+        _gemini_client = wrap_openai(AsyncOpenAI(
             api_key=settings.gemini_api_key,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-        )
+        ))
     return _gemini_client
 
 
@@ -42,15 +44,16 @@ def _get_sarvam_client() -> AsyncOpenAI:
     """Sarvam client for Indic LLM (fallback)."""
     global _sarvam_client
     if _sarvam_client is None:
-        _sarvam_client = AsyncOpenAI(
+        _sarvam_client = wrap_openai(AsyncOpenAI(
             api_key=settings.sarvam_api_key,
             base_url="https://api.sarvam.ai/v1"
-        )
+        ))
     return _sarvam_client
 
 
 # ── CALLERS ───────────────────────────────────────────
 
+@traceable(name="call_groq", tags=["llm", "groq"])
 async def call_groq(prompt: str, model: str) -> str:
     client = _get_groq_client()
     response = await client.chat.completions.create(
@@ -61,6 +64,7 @@ async def call_groq(prompt: str, model: str) -> str:
     return response.choices[0].message.content.strip()
 
 
+@traceable(name="call_gemini", tags=["llm", "gemini"])
 async def call_gemini(prompt: str, model: str) -> str:
     client = _get_gemini_client()
     response = await client.chat.completions.create(
@@ -71,6 +75,7 @@ async def call_gemini(prompt: str, model: str) -> str:
     return response.choices[0].message.content.strip()
 
 
+@traceable(name="call_sarvam", tags=["llm", "sarvam"])
 async def call_sarvam(prompt: str, model: str) -> str:
     client = _get_sarvam_client()
     response = await client.chat.completions.create(
@@ -83,6 +88,7 @@ async def call_sarvam(prompt: str, model: str) -> str:
 
 # ── MAIN ROUTER WITH FALLBACK ─────────────────────────
 
+@traceable(name="llm_complete", tags=["llm", "routing"])
 async def llm_complete(prompt: str, lang: str | None = None) -> str:
     """Smart routing LLM completion with fallback on rate limits."""
     detected_lang = lang or detect_language(prompt)
@@ -111,6 +117,7 @@ async def llm_complete(prompt: str, lang: str | None = None) -> str:
             raise e
 
 
+@traceable(name="llm_complete_with_history", tags=["llm", "chat", "routing"])
 async def llm_complete_with_history(messages: list, lang: str | None = None) -> str:
     """Multi-turn LLM completion with full message history and fallback."""
     detected_lang = lang or "en"
@@ -159,6 +166,7 @@ async def llm_complete_with_history(messages: list, lang: str | None = None) -> 
 
 # ── TASK SPECIFIC FUNCTIONS ───────────────────────────
 
+@traceable(name="generate_summary", tags=["pipeline", "summarization"])
 async def generate_summary(content: str, content_language: str | None = None) -> str:
     """Generate a precise 3-sentence summary relying on smart routing."""
     lang = content_language or detect_language(content)
@@ -192,6 +200,7 @@ async def generate_summary(content: str, content_language: str | None = None) ->
     return result
 
 
+@traceable(name="extract_concepts", tags=["pipeline", "concepts"])
 async def extract_concepts(content: str) -> list[str]:
     """Extract key concepts and entities from the content."""
     cache_query = content[:500]
@@ -217,6 +226,7 @@ async def extract_concepts(content: str) -> list[str]:
     return concepts
 
 
+@traceable(name="synthesize_answer", tags=["rag", "search"])
 async def synthesize_answer(query: str, contexts: list[str], user_id: str | None = None) -> str:
     """RAG: Generate a synthesized answer from retrieved contexts."""
     cached = await get_cached_response(query, cache_key="rag", user_id=user_id)
@@ -251,6 +261,7 @@ async def synthesize_answer(query: str, contexts: list[str], user_id: str | None
     return result
 
 
+@traceable(name="generate_topic_name", tags=["pipeline", "clustering"])
 async def generate_topic_name(contents: list[str]) -> str:
     """Generate a descriptive name for a topic cluster given sample contents."""
     samples = "\n---\n".join(c[:500] for c in contents[:5])
@@ -266,6 +277,7 @@ async def generate_topic_name(contents: list[str]) -> str:
     return result
 
 
+@traceable(name="summarize_youtube_video", tags=["pipeline", "youtube"])
 async def summarize_youtube_video(transcript: str, content_language: str | None = None) -> str:
     """Summarize a YouTube video transcript into structured points natively in the requested language."""
     lang = content_language or detect_language(transcript)

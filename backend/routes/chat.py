@@ -12,6 +12,7 @@ from database import get_db
 from models import ChatSession, ChatMessage, User
 from middleware.auth import CurrentUser
 from services.chat import chat_with_vault, generate_session_title
+from langsmith.run_helpers import get_current_run_tree
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -112,6 +113,11 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
 ):
     """Send a message and get a RAG-grounded response."""
+
+    run = get_current_run_tree()
+    if run:
+        run.metadata["user_id"] = str(current_user.id)
+        run.metadata["session_id"] = req.session_id
 
     # Create or get session
     session_id = None

@@ -17,6 +17,8 @@ from routes.cache import router as cache_router
 from routes.auth import limiter
 from mcp_server import mcp
 from services.semantic_cache import cleanup_expired_cache
+from services.monitoring import is_monitoring_enabled
+from config import get_settings
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -29,6 +31,14 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Initialize database on startup."""
     logger.info("🚀 Starting MindVault...")
+    
+    # LangSmith Init
+    settings = get_settings()
+    if is_monitoring_enabled():
+        logger.info(f"📊 [LangSmith] Monitoring enabled → project: {settings.langchain_project}")
+    else:
+        logger.info("ℹ️ [LangSmith] Monitoring disabled — add LANGCHAIN_API_KEY to .env")
+        
     await init_db()
     logger.info("✅ Database initialized with pgvector extension")
     await cleanup_expired_cache()

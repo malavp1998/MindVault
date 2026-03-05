@@ -8,11 +8,13 @@ from services.embedding import get_embedding
 from services.llm import llm_complete, llm_complete_with_history
 from services.language import detect_language, is_indic
 from services.semantic_cache import get_cached_response, set_cached_response
+from langsmith import traceable
 
 MAX_HISTORY_MESSAGES = 10   # last 10 messages sent to LLM
 MAX_CONTEXT_NOTES = 5       # top 5 notes retrieved per message
 
 
+@traceable(name="generate_session_title", tags=["chat", "title"])
 async def generate_session_title(first_message: str) -> str:
     """Generate a short 4-6 word title for a chat session."""
     prompt = (
@@ -26,6 +28,7 @@ async def generate_session_title(first_message: str) -> str:
     return title.strip().strip('"').strip("'")[:255]
 
 
+@traceable(name="chat_with_vault", tags=["chat", "rag", "multi-turn"])
 async def chat_with_vault(
     query: str,
     user_id: str,

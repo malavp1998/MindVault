@@ -12,6 +12,7 @@ from schemas import SearchResult, NoteListOut
 from services.embedding import get_embedding
 from services.llm import llm_complete
 from services.language import detect_language, is_indic
+from langsmith import traceable
 
 
 # ─── State ──────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ class AgentState(TypedDict):
 
 # ─── Nodes ──────────────────────────────────────────────────────
 
+@traceable(name="agent_search_node", tags=["agent", "retrieval"])
 async def search_node(state: AgentState) -> dict:
     """Retrieve top-5 relevant notes from pgvector via the current query."""
     query_embedding = await get_embedding(state["query"])
@@ -88,6 +90,7 @@ async def search_node(state: AgentState) -> dict:
     return {"retrieved_notes": search_results}
 
 
+@traceable(name="agent_synthesize_node", tags=["agent", "synthesis"])
 async def synthesize_node(state: AgentState) -> dict:
     """Generate final answer from retrieved notes."""
     query = state["query"]

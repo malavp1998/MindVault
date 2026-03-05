@@ -2,6 +2,8 @@ from __future__ import annotations
 """Embedding service — supports Jina AI backend."""
 
 from openai import AsyncOpenAI
+from langsmith.wrappers import wrap_openai
+from langsmith import traceable
 from config import get_settings
 
 settings = get_settings()
@@ -12,13 +14,14 @@ _jina_client: AsyncOpenAI | None = None
 def _get_jina_client() -> AsyncOpenAI:
     global _jina_client
     if _jina_client is None:
-        _jina_client = AsyncOpenAI(
+        _jina_client = wrap_openai(AsyncOpenAI(
             api_key=settings.jina_api_key,
             base_url="https://api.jina.ai/v1"
-        )
+        ))
     return _jina_client
 
 
+@traceable(name="get_embedding", tags=["embedding", "jina"])
 async def get_embedding(text: str) -> list[float]:
     """Generate an embedding vector for the given text using Jina AI."""
     text = text[:8000]

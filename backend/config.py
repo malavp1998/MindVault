@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     recluster_every_n: int = 20
 
+    # LangSmith Monitoring
+    langchain_tracing_v2: str = "true"
+    langchain_api_key: str = ""
+    langchain_project: str = "MindVault"
+    langchain_endpoint: str = "https://api.smith.langchain.com"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

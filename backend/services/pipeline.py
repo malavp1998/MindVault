@@ -13,6 +13,7 @@ from services.language import detect_language
 from services.tagging import generate_tags
 from services.clustering import cluster_notes
 from services.semantic_cache import invalidate_user_cache
+from langsmith import traceable
 import asyncio
 from config import get_settings
 from database import async_session
@@ -21,6 +22,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+@traceable(name="process_note_pipeline", tags=["pipeline", "ingestion"], metadata={"pipeline_version": "1.0"})
 async def process_note(note_id: uuid.UUID) -> None:
     """Full AI processing pipeline for a note. Runs asynchronously."""
 

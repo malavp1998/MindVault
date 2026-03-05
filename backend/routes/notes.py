@@ -24,6 +24,7 @@ from services.pipeline import process_note
 from services.transcription import transcribe_youtube
 from services.tagging import generate_tags
 from middleware.auth import get_current_user, CurrentUser
+from langsmith.run_helpers import get_current_run_tree
 import urllib.parse
 import yt_dlp
 
@@ -38,6 +39,11 @@ async def create_note(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new note and trigger async AI processing."""
+    run = get_current_run_tree()
+    if run:
+        run.metadata["user_id"] = str(current_user.id)
+        run.metadata["username"] = current_user.email or "unknown"
+
     content = body.content
     if body.annotation:
         content = f"[User Annotation]: {body.annotation}\n\n{content}"
@@ -82,6 +88,12 @@ async def create_youtube_note(
     db: AsyncSession = Depends(get_db),
 ):
     """Fetch YouTube transcript, summarize via LLM, and save as a new note."""
+    run = get_current_run_tree()
+    if run:
+        run.metadata["user_id"] = str(current_user.id)
+        run.metadata["username"] = current_user.email or "unknown"
+        run.metadata["video_url"] = body.video_url
+
     # 0. Fetch real video title (metadata only, no download)
     video_title = get_youtube_title(body.video_url)
 
@@ -182,6 +194,12 @@ async def search_notes(
     db: AsyncSession = Depends(get_db),
 ):
     """Semantic search via pgvector cosine similarity, with optional RAG synthesis — scoped to current user."""
+    run = get_current_run_tree()
+    if run:
+        run.metadata["user_id"] = str(current_user.id)
+        run.metadata["query"] = q
+        run.metadata["rag_enabled"] = synthesize
+
     # Generate query embedding
     query_embedding = await get_embedding(q)
 

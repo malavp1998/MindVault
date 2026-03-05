@@ -9,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from services.embedding import get_embedding
 from database import async_session
+from langsmith import traceable
+from langsmith.run_helpers import get_current_run_tree
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+@traceable(name="semantic_cache_lookup", tags=["cache"])
 async def get_cached_response(
     query: str,
     cache_key: str,
@@ -67,9 +70,18 @@ async def get_cached_response(
                 )
                 await db.commit()
                 logger.info(f"[SemanticCache] HIT key={cache_key} similarity={similarity:.3f}")
+                run = get_current_run_tree()
+                if run:
+                    run.metadata["cache_hit"] = True
+                    run.metadata["cache_similarity"] = round(float(similarity), 3)
+                    run.metadata["cache_key"] = cache_key
                 return response
 
         logger.info(f"[SemanticCache] MISS key={cache_key}")
+        run = get_current_run_tree()
+        if run:
+            run.metadata["cache_hit"] = False
+            run.metadata["cache_key"] = cache_key
         return None
 
     except Exception as e:
@@ -77,6 +89,7 @@ async def get_cached_response(
         return None
 
 
+@traceable(name="semantic_cache_set", tags=["cache"])
 async def set_cached_response(
     query: str,
     response: str,
