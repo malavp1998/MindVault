@@ -45,43 +45,22 @@ async def transcribe_youtube(video_url: str) -> tuple[str, str]:
         raise ValueError(f"Could not extract video ID from URL: {video_url}")
 
     # Step 1 — try captions via youtube_transcript_api
-    # Use list_transcripts() to find ANY available transcript
+    # Supports both v1.x (instance methods) and v0.x (static methods)
     caption_error = None
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
 
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        api = YouTubeTranscriptApi()
 
-        # Try manually created transcripts first (most accurate)
-        transcript = None
+        # v1.x API: api.fetch() returns transcript directly
         try:
-            transcript = transcript_list.find_manually_created_transcript(
-                ["en", "hi", "ta", "te", "kn", "bn", "ml"]
-            )
-        except Exception:
-            pass
-
-        # Fall back to auto-generated transcripts (YouTube's ASR)
-        if transcript is None:
-            try:
-                transcript = transcript_list.find_generated_transcript(
-                    ["en", "hi", "ta", "te", "kn", "bn", "ml"]
-                )
-            except Exception:
-                pass
-
-        # Last resort — grab whatever transcript exists
-        if transcript is None:
-            for t in transcript_list:
-                transcript = t
-                break
-
-        if transcript is not None:
-            fetched = transcript.fetch()
-            text = " ".join([t.text for t in fetched])
+            fetched = api.fetch(video_id)
+            text = " ".join([snippet.text for snippet in fetched])
             if text.strip():
                 lang = detect_language(text)
                 return text, lang
+        except Exception as e:
+            caption_error = str(e)
 
     except Exception as e:
         caption_error = str(e)
