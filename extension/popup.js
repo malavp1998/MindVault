@@ -215,13 +215,64 @@ async function handleSummarizeYoutube() {
     const annotation = document.getElementById("annotation").value.trim()
 
     btn.disabled = true
-    btn.textContent = "Summarizing..."
+    btn.textContent = "Extracting captions..."
 
     try {
+        // Extract transcript client-side from the YouTube page
+        // (user's browser has residential IP — not blocked by YouTube)
+        let transcript = ""
+        let videoTitle = currentTab?.title || ""
+
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+            const results = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: async () => {
+                    // Get caption tracks from YouTube's player response
+                    try {
+                        const playerResponse =
+                            window.ytInitialPlayerResponse ||
+                            document.querySelector("#movie_player")?.getPlayerResponse?.()
+
+                        const tracks = playerResponse?.captions
+                            ?.playerCaptionsTracklistRenderer?.captionTracks
+
+                        if (!tracks || tracks.length === 0) return ""
+
+                        // Prefer manual captions, fall back to auto-generated
+                        const manual = tracks.find(t => t.kind !== "asr")
+                        const track = manual || tracks[0]
+
+                        // Fetch the caption XML
+                        const url = track.baseUrl + "&fmt=json3"
+                        const resp = await fetch(url)
+                        const data = await resp.json()
+
+                        // Extract text from events
+                        return (data.events || [])
+                            .filter(e => e.segs)
+                            .map(e => e.segs.map(s => s.utf8).join(""))
+                            .join(" ")
+                            .replace(/\n/g, " ")
+                            .trim()
+                    } catch {
+                        return ""
+                    }
+                }
+            })
+            transcript = results[0]?.result || ""
+        } catch (e) {
+            console.log("[MindVault] Content script extraction failed:", e)
+        }
+
+        btn.textContent = "Summarizing..."
+
         const result = await sendMessage({
             type: "SUMMARIZE_YOUTUBE",
             videoUrl: currentTab?.url,
-            annotation
+            annotation,
+            transcript,
+            title: videoTitle
         })
 
         btn.disabled = false
@@ -239,12 +290,10 @@ async function handleSummarizeYoutube() {
         } else if (result?.status === 401) {
             showScreen("login")
         } else {
-            // API returned an error — show it to the user
             const errorMsg = result?.data?.detail || "Failed to summarize video. Please try again."
             alert(`❌ ${errorMsg}`)
         }
     } catch (err) {
-        // network error or service worker issue
         btn.disabled = false
         btn.textContent = "Summarize & Save"
         alert("❌ Could not reach MindVault server. Check your connection and try again.")

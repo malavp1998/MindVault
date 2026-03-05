@@ -121,12 +121,14 @@ async function getRelatedNotes(url, content) {
     return await apiCall(`/api/notes/related?${params.toString()}`)
 }
 
-async function summarizeYoutube(videoUrl, annotation) {
+async function summarizeYoutube(videoUrl, annotation, transcript, title) {
     return await apiCall("/api/notes/youtube", {
         method: "POST",
         body: JSON.stringify({
             video_url: videoUrl,
-            annotation: annotation || ""
+            annotation: annotation || "",
+            transcript: transcript || "",
+            title: title || ""
         })
     })
 }
@@ -170,7 +172,7 @@ async function handleMessage(message) {
             return await getRelatedNotes(message.url, message.content)
 
         case "SUMMARIZE_YOUTUBE":
-            return await summarizeYoutube(message.videoUrl, message.annotation)
+            return await summarizeYoutube(message.videoUrl, message.annotation, message.transcript, message.title)
 
         case "SEARCH_VAULT":
             return await searchVault(message.query)

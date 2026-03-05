@@ -95,21 +95,31 @@ async def create_youtube_note(
     current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetch YouTube transcript, summarize via LLM, and save as a new note."""
+    """Fetch YouTube transcript, summarize via LLM, and save as a new note.
+
+    Accepts an optional `transcript` field — if provided (e.g. from the
+    Chrome extension which extracts captions client-side), the server
+    skips its own transcription step.  This works around YouTube blocking
+    cloud-provider IPs.
+    """
     run = get_current_run_tree()
     if run:
         run.metadata["user_id"] = str(current_user.id)
         run.metadata["username"] = current_user.email or "unknown"
         run.metadata["video_url"] = body.video_url
 
-    # 0. Fetch real video title (metadata only, no download)
-    video_title = get_youtube_title(body.video_url)
+    # 0. Title — prefer client-provided, else fetch via yt-dlp
+    video_title = body.title or get_youtube_title(body.video_url)
 
-    # 1. Fetch transcript and detect language from the new cloud service
-    try:
-        transcript_text, lang = await transcribe_youtube(body.video_url)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
+    # 1. Transcript — prefer client-provided, else fetch server-side
+    if body.transcript and body.transcript.strip():
+        transcript_text = body.transcript.strip()
+        lang = detect_language(transcript_text)
+    else:
+        try:
+            transcript_text, lang = await transcribe_youtube(body.video_url)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
 
     # 2. Ask LLM to summarize natively
     try:

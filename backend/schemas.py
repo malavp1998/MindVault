@@ -20,6 +20,8 @@ class NoteCreate(BaseModel):
 class NoteYoutubeCreate(BaseModel):
     video_url: str = Field(..., description="The URL of the YouTube video")
     annotation: str | None = None
+    transcript: str | None = Field(None, description="Pre-fetched transcript text (client-side extraction)")
+    title: str | None = Field(None, description="Video title from client")
 
 
 class NoteLinkOut(BaseModel):
