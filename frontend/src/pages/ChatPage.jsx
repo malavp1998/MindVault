@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from "react"
 import api from "../api"
 
+const FALLBACK_SUGGESTIONS = [
+    "What have I saved recently?",
+    "Summarize my vault",
+    "What topics have I studied?",
+    "Show me my latest notes",
+]
+
 export default function ChatPage() {
     const [sessions, setSessions] = useState([])
     const [activeSession, setActiveSession] = useState(null)
@@ -9,10 +16,12 @@ export default function ChatPage() {
     const [loading, setLoading] = useState(false)
     const [loadingHistory, setLoadingHistory] = useState(false)
     const [sidebarOpen, setSidebarOpen] = useState(true)
+    const [suggestions, setSuggestions] = useState([])
+    const [suggestionsLoading, setSuggestionsLoading] = useState(true)
     const bottomRef = useRef(null)
     const inputRef = useRef(null)
 
-    useEffect(() => { loadSessions() }, [])
+    useEffect(() => { loadSessions(); loadSuggestions() }, [])
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [messages])
@@ -99,12 +108,40 @@ export default function ChatPage() {
         }
     }
 
-    const suggestions = [
-        "What did I learn about transformers?",
-        "Summarize my machine learning notes",
-        "What YouTube videos have I saved?",
-        "What are my notes on React hooks?"
-    ]
+    const loadSuggestions = async (forceRefresh = false) => {
+        setSuggestionsLoading(true)
+
+        // Check localStorage cache (30-minute TTL)
+        if (!forceRefresh) {
+            try {
+                const cached = localStorage.getItem("mv_suggestions")
+                if (cached) {
+                    const { suggestions: cachedSuggestions, timestamp } = JSON.parse(cached)
+                    const age = Date.now() - timestamp
+                    if (age < 30 * 60 * 1000) {
+                        setSuggestions(cachedSuggestions)
+                        setSuggestionsLoading(false)
+                        return
+                    }
+                }
+            } catch { }
+        }
+
+        // Fetch fresh suggestions
+        try {
+            const res = await api.get("/chat/suggestions")
+            const fresh = res.data.suggestions
+            setSuggestions(fresh)
+            localStorage.setItem("mv_suggestions", JSON.stringify({
+                suggestions: fresh,
+                timestamp: Date.now(),
+            }))
+        } catch (e) {
+            setSuggestions(FALLBACK_SUGGESTIONS)
+        } finally {
+            setSuggestionsLoading(false)
+        }
+    }
 
     return (
         <div style={{
@@ -275,39 +312,79 @@ export default function ChatPage() {
                                 Ask questions about anything you've saved.
                                 MindVault will answer using your own notes.
                             </p>
-                            <div style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: "10px",
-                                maxWidth: "500px",
-                                width: "100%",
-                            }}>
-                                {suggestions.map(s => (
-                                    <button
-                                        key={s}
-                                        onClick={() => { setInput(s); inputRef.current?.focus() }}
-                                        style={{
+
+                            {/* Dynamic suggestions */}
+                            {suggestionsLoading ? (
+                                <div style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: "10px",
+                                    maxWidth: "500px",
+                                    width: "100%",
+                                }}>
+                                    {[1, 2, 3, 4].map(i => (
+                                        <div key={i} style={{
                                             background: "#16161e",
                                             border: "1px solid #1e1e2e",
                                             borderRadius: "12px",
-                                            padding: "12px 14px",
-                                            textAlign: "left",
-                                            color: "#aaa",
-                                            fontSize: "12px",
-                                            cursor: "pointer",
-                                            transition: "all 0.15s",
-                                        }}
-                                        onMouseEnter={e => {
-                                            e.currentTarget.style.borderColor = "#7c3aed"
-                                            e.currentTarget.style.color = "#ddd"
-                                        }}
-                                        onMouseLeave={e => {
-                                            e.currentTarget.style.borderColor = "#1e1e2e"
-                                            e.currentTarget.style.color = "#aaa"
-                                        }}
-                                    >{s}</button>
-                                ))}
-                            </div>
+                                            height: "44px",
+                                            animation: "pulse 1.5s ease-in-out infinite",
+                                        }} />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: "10px",
+                                    maxWidth: "500px",
+                                    width: "100%",
+                                }}>
+                                    {suggestions.map((s, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => { setInput(s); inputRef.current?.focus() }}
+                                            style={{
+                                                background: "#16161e",
+                                                border: "1px solid #1e1e2e",
+                                                borderRadius: "12px",
+                                                padding: "12px 14px",
+                                                textAlign: "left",
+                                                color: "#aaa",
+                                                fontSize: "12px",
+                                                cursor: "pointer",
+                                                transition: "all 0.15s",
+                                            }}
+                                            onMouseEnter={e => {
+                                                e.currentTarget.style.borderColor = "#7c3aed"
+                                                e.currentTarget.style.color = "#ddd"
+                                            }}
+                                            onMouseLeave={e => {
+                                                e.currentTarget.style.borderColor = "#1e1e2e"
+                                                e.currentTarget.style.color = "#aaa"
+                                            }}
+                                        >{s}</button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Refresh suggestions */}
+                            <button
+                                onClick={() => loadSuggestions(true)}
+                                disabled={suggestionsLoading}
+                                style={{
+                                    marginTop: "16px",
+                                    background: "none",
+                                    border: "none",
+                                    color: "#555",
+                                    fontSize: "11px",
+                                    cursor: suggestionsLoading ? "not-allowed" : "pointer",
+                                    opacity: suggestionsLoading ? 0.4 : 1,
+                                    transition: "color 0.15s",
+                                }}
+                                onMouseEnter={e => { if (!suggestionsLoading) e.currentTarget.style.color = "#999" }}
+                                onMouseLeave={e => e.currentTarget.style.color = "#555"}
+                            >↻ Refresh suggestions</button>
                         </div>
                     )}
 
@@ -425,11 +502,15 @@ export default function ChatPage() {
                 </div>
             </div>
 
-            {/* Bounce animation */}
+            {/* Animations */}
             <style>{`
                 @keyframes bounce {
                     0%, 80%, 100% { transform: translateY(0); }
                     40% { transform: translateY(-6px); }
+                }
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.4; }
                 }
             `}</style>
         </div>
