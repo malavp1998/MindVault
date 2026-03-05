@@ -44,9 +44,15 @@ function showMain(user) {
             currentTab.url || ""
     }
 
-    // show youtube banner if on youtube
+    // show correct UI based on page type
     if (isYoutube) {
+        // YouTube — show transcription banner only
         document.getElementById("youtube-banner").classList.remove("hidden")
+        document.getElementById("save-form").classList.add("hidden")
+    } else {
+        // normal webpage — show regular save form only
+        document.getElementById("youtube-banner").classList.add("hidden")
+        document.getElementById("save-form").classList.remove("hidden")
     }
 
     // load related notes immediately on open
