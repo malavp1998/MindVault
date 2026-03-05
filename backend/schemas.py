@@ -24,6 +24,15 @@ class NoteYoutubeCreate(BaseModel):
     title: str | None = Field(None, description="Video title from client")
 
 
+class YoutubeSummarizeRequest(BaseModel):
+    transcript: str
+    video_url: str
+    video_title: str = "YouTube Video"
+    annotation: str = ""
+    extraction_method: str = "unknown"
+    warning: str = ""
+
+
 class NoteLinkOut(BaseModel):
     id: UUID
     note_id: UUID

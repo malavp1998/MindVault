@@ -14,7 +14,7 @@ from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
     RelatedNotesResponse, NoteYoutubeCreate,
-    TagUpdate, SuggestTagsResponse
+    YoutubeSummarizeRequest, TagUpdate, SuggestTagsResponse
 )
 from services.embedding import get_embedding
 from services.llm import summarize_youtube_video
@@ -119,6 +119,13 @@ async def create_youtube_note(
         try:
             transcript_text, lang = await transcribe_youtube(body.video_url)
         except Exception as e:
+            if "blocked" in str(e).lower() or "bot" in str(e).lower() or "ip" in str(e).lower():
+                raise HTTPException(
+                    status_code=422,
+                    detail="YouTube blocked captions on this server. "
+                           "Please use the MindVault Chrome extension to save YouTube videos — "
+                           "it extracts transcripts directly from your browser."
+                )
             raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
 
     # 2. Ask LLM to summarize natively
@@ -147,6 +154,53 @@ async def create_youtube_note(
     background_tasks.add_task(process_note, note.id)
 
     return _note_to_out(note)
+
+
+@router.post("/youtube-summarize")
+async def summarize_youtube_note(
+    req: YoutubeSummarizeRequest,
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Summarize a YouTube video using a transcript pre-extracted by the client.
+    This entirely avoids backend YouTube IP blocks.
+    """
+    content = req.transcript
+    if req.annotation:
+        content = f"{req.annotation}\n\n{content}"
+
+    # detect language from transcript
+    lang = detect_language(content[:500])
+
+    # save note with transcript as content
+    # pipeline will summarize, tag, and embed it
+    note = Note(
+        content=content,
+        title=req.video_title,
+        source_url=req.video_url,
+        language=lang,
+        user_id=current_user.id,
+        tags=["youtube", "video"]
+    )
+    db.add(note)
+    await db.flush()
+    await db.refresh(note)
+
+    # run summarization pipeline synchronously to return processed result
+    # (or we could return immediately and process async, but user example implies sync)
+    await process_note(str(note.id))
+
+    # fetch processed note with tags
+    processed = await db.execute(select(Note).where(Note.id == note.id))
+    processed_note = processed.scalar_one()
+
+    # The user spec asks for a dict return with extra warning/method fields
+    out_dict = _note_to_out(processed_note).model_dump()
+    out_dict["warning"] = req.warning
+    out_dict["extraction_method"] = req.extraction_method
+
+    return out_dict
 
 
 @router.get("", response_model=list[NoteListOut])

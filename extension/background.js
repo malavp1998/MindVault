@@ -171,8 +171,98 @@ async function handleMessage(message) {
         case "GET_RELATED":
             return await getRelatedNotes(message.url, message.content)
 
-        case "SUMMARIZE_YOUTUBE":
-            return await summarizeYoutube(message.videoUrl, message.annotation, message.transcript, message.title)
+        case "SUMMARIZE_YOUTUBE": {
+            // Step 1 — Extract transcript client-side
+            let transcript = null
+            let warning = null
+            let method = null
+
+            try {
+                const [tab] = await chrome.tabs.query({
+                    active: true, currentWindow: true
+                })
+
+                // First try executing in MAIN world to access window.ytInitialPlayerResponse
+                try {
+                    const results = await chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        world: "MAIN",
+                        func: async () => {
+                            try {
+                                const pr = window.ytInitialPlayerResponse ||
+                                    document.querySelector("#movie_player")?.getPlayerResponse?.()
+                                const tracks = pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks
+                                if (!tracks || tracks.length === 0) return null
+
+                                const track = tracks.find(t => t.kind !== "asr") || tracks[0]
+                                const url = track.baseUrl + (track.baseUrl.includes("?") ? "&" : "?") + "fmt=json3"
+
+                                const res = await fetch(url)
+                                const data = await res.json()
+                                return {
+                                    transcript: (data.events || [])
+                                        .filter(e => e.segs)
+                                        .map(e => e.segs.map(s => s.utf8).join(""))
+                                        .join(" ")
+                                        .replace(/\n/g, " ")
+                                        .trim(),
+                                    method: "main_world_player_response"
+                                }
+                            } catch {
+                                return null
+                            }
+                        }
+                    })
+
+                    if (results && results[0]?.result?.transcript) {
+                        transcript = results[0].result.transcript
+                        method = results[0].result.method
+                    }
+                } catch (e) {
+                    console.log("[MindVault] MAIN world extraction failed:", e)
+                }
+
+                // If MAIN world failed, fallback to content script (ISOLATED world)
+                if (!transcript) {
+                    const contentScriptResult = await new Promise((resolve) => {
+                        chrome.tabs.sendMessage(
+                            tab.id,
+                            { type: "GET_YOUTUBE_TRANSCRIPT" },
+                            resolve
+                        )
+                    })
+
+                    if (contentScriptResult && contentScriptResult.transcript) {
+                        transcript = contentScriptResult.transcript
+                        method = contentScriptResult.method
+                        warning = contentScriptResult.warning
+                    }
+                }
+
+            } catch (e) {
+                console.error("[MindVault] Transcript extraction failed:", e)
+            }
+
+            if (!transcript) {
+                return {
+                    ok: false,
+                    error: "Could not extract transcript from this video. The video may not have captions available."
+                }
+            }
+
+            // Step 2 — Send transcript to backend for summarization only
+            return await apiCall("/api/notes/youtube-summarize", {
+                method: "POST",
+                body: JSON.stringify({
+                    transcript: transcript,
+                    video_url: message.videoUrl,
+                    video_title: message.videoTitle || "YouTube Video",
+                    annotation: message.annotation || "",
+                    extraction_method: method || "unknown",
+                    warning: warning || ""
+                })
+            })
+        }
 
         case "SEARCH_VAULT":
             return await searchVault(message.query)
