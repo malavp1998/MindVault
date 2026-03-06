@@ -177,135 +177,140 @@ async function handleMessage(message) {
             })
 
             let transcriptResult = null
-            const isShorts = (message.videoUrl || "").includes("/shorts/")
+            const videoUrl = message.videoUrl || ""
+            const isShorts = videoUrl.includes("/shorts/")
+            let originalUrl = null
 
-            // ── METHOD 1 — content script API-based extraction ────
-            // Uses ytInitialPlayerResponse captions + timedtext API
-            // Works for both regular videos AND Shorts
+            // ── SHORTS URL CONVERSION ─────────────────────────────
+            // Convert /shorts/VIDEO_ID → /watch?v=VIDEO_ID so the
+            // regular video page loads with transcript panel UI
+            if (isShorts) {
+                const shortsMatch = videoUrl.match(/\/shorts\/([a-zA-Z0-9_-]+)/)
+                if (shortsMatch) {
+                    originalUrl = videoUrl
+                    const watchUrl = `https://www.youtube.com/watch?v=${shortsMatch[1]}`
+                    console.log("[MindVault] Converting Shorts URL:", originalUrl, "→", watchUrl)
+
+                    // Navigate the tab to the regular watch page
+                    await chrome.tabs.update(tab.id, { url: watchUrl })
+
+                    // Wait for the page to fully load
+                    await new Promise(resolve => {
+                        const onComplete = (tabId, changeInfo) => {
+                            if (tabId === tab.id && changeInfo.status === "complete") {
+                                chrome.tabs.onUpdated.removeListener(onComplete)
+                                resolve()
+                            }
+                        }
+                        chrome.tabs.onUpdated.addListener(onComplete)
+                    })
+
+                    // Extra wait for YouTube SPA to render DOM elements
+                    await new Promise(r => setTimeout(r, 2000))
+                }
+            }
+
+            // ── DOM SCRAPE — works on regular video page ──────────
             try {
-                const csResult = await chrome.tabs.sendMessage(tab.id, {
-                    type: "GET_YOUTUBE_TRANSCRIPT"
+                const result = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    world: "ISOLATED",
+                    func: async () => {
+
+                        const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+                        // ── STEP 1 — check if transcript panel already open ──
+                        const getSegments = () => document.querySelectorAll(
+                            "ytd-transcript-segment-renderer .segment-text"
+                        )
+
+                        // ── STEP 2 — open transcript panel ───────────────────
+                        if (getSegments().length === 0) {
+
+                            // first expand the description "...more" section
+                            const showMoreBtn = document.querySelector(
+                                "tp-yt-paper-button#expand, " +
+                                "#description tp-yt-paper-button#expand, " +
+                                "ytd-text-inline-expander tp-yt-paper-button#expand"
+                            )
+
+                            if (showMoreBtn) {
+                                showMoreBtn.click()
+                                await sleep(800)
+                            }
+
+                            // find Show transcript button in expanded description
+                            const allButtons = document.querySelectorAll(
+                                "button, tp-yt-paper-button, ytd-button-renderer"
+                            )
+
+                            let transcriptBtn = null
+                            for (const btn of allButtons) {
+                                if (btn.innerText?.toLowerCase().includes("transcript")) {
+                                    transcriptBtn = btn
+                                    if (btn.tagName === "BUTTON") break
+                                }
+                            }
+
+                            if (!transcriptBtn) {
+                                return {
+                                    error: "Show transcript button not found — " +
+                                        "video may not have captions"
+                                }
+                            }
+
+                            transcriptBtn.click()
+
+                            // poll until segments appear — max 5 seconds
+                            let attempts = 0
+                            while (getSegments().length === 0 && attempts < 10) {
+                                await sleep(500)
+                                attempts++
+                            }
+                        }
+
+                        // ── STEP 3 — read segments from DOM ──────────────────
+                        const segments = getSegments()
+
+                        if (segments.length === 0) {
+                            return { error: "Transcript panel opened but no segments found" }
+                        }
+
+                        const text = Array.from(segments)
+                            .map(el => el.innerText?.trim())
+                            .filter(Boolean)
+                            .join(" ")
+                            .replace(/\s+/g, " ")
+                            .trim()
+
+                        if (!text || text.length < 50) {
+                            return { error: "Transcript text too short" }
+                        }
+
+                        return {
+                            transcript: text,
+                            segmentCount: segments.length,
+                            method: "dom_scrape"
+                        }
+                    }
                 })
 
-                console.log("[MindVault] Content script extraction result:", csResult)
+                const data = result?.[0]?.result
+                console.log("[MindVault] DOM scrape result:", data)
 
-                if (csResult?.transcript && !csResult?.warning) {
+                if (data?.transcript) {
                     transcriptResult = {
-                        transcript: csResult.transcript,
-                        method: csResult.method || "content_script",
+                        transcript: data.transcript,
+                        method: isShorts ? "shorts_url_convert" : "dom_scrape",
                         warning: ""
                     }
                 }
+
             } catch (e) {
-                console.log("[MindVault] Content script extraction failed:", e.message)
+                console.log("[MindVault] DOM scrape failed:", e.message)
             }
 
-            // ── METHOD 2 — DOM scrape (regular videos only) ───────
-            // Shorts don't have transcript panel UI, so skip for them
-            if (!transcriptResult && !isShorts) {
-                try {
-                    const result = await chrome.scripting.executeScript({
-                        target: { tabId: tab.id },
-                        world: "ISOLATED",
-                        func: async () => {
-
-                            const sleep = ms => new Promise(r => setTimeout(r, ms))
-
-                            // ── STEP 1 — check if transcript panel already open ──
-                            const getSegments = () => document.querySelectorAll(
-                                "ytd-transcript-segment-renderer .segment-text"
-                            )
-
-                            // ── STEP 2 — open transcript panel ───────────────────
-                            if (getSegments().length === 0) {
-
-                                // first expand the description "...more" section
-                                // Show transcript button lives here not in ... menu
-                                const showMoreBtn = document.querySelector(
-                                    "tp-yt-paper-button#expand, " +
-                                    "#description tp-yt-paper-button#expand, " +
-                                    "ytd-text-inline-expander tp-yt-paper-button#expand"
-                                )
-
-                                if (showMoreBtn) {
-                                    showMoreBtn.click()
-                                    await sleep(800)
-                                }
-
-                                // find Show transcript button in expanded description
-                                const allButtons = document.querySelectorAll(
-                                    "button, tp-yt-paper-button, ytd-button-renderer"
-                                )
-
-                                let transcriptBtn = null
-                                for (const btn of allButtons) {
-                                    if (btn.innerText?.toLowerCase().includes("transcript")) {
-                                        // prefer the BUTTON element not the renderer wrapper
-                                        transcriptBtn = btn
-                                        if (btn.tagName === "BUTTON") break
-                                    }
-                                }
-
-                                if (!transcriptBtn) {
-                                    return {
-                                        error: "Show transcript button not found — " +
-                                            "video may not have captions"
-                                    }
-                                }
-
-                                transcriptBtn.click()
-
-                                // poll until segments appear — max 5 seconds
-                                let attempts = 0
-                                while (getSegments().length === 0 && attempts < 10) {
-                                    await sleep(500)
-                                    attempts++
-                                }
-                            }
-
-                            // ── STEP 3 — read segments from DOM ──────────────────
-                            const segments = getSegments()
-
-                            if (segments.length === 0) {
-                                return { error: "Transcript panel opened but no segments found" }
-                            }
-
-                            const text = Array.from(segments)
-                                .map(el => el.innerText?.trim())
-                                .filter(Boolean)
-                                .join(" ")
-                                .replace(/\s+/g, " ")
-                                .trim()
-
-                            if (!text || text.length < 50) {
-                                return { error: "Transcript text too short" }
-                            }
-
-                            return {
-                                transcript: text,
-                                segmentCount: segments.length,
-                                method: "dom_scrape"
-                            }
-                        }
-                    })
-
-                    const data = result?.[0]?.result
-                    console.log("[MindVault] DOM scrape result:", data)
-
-                    if (data?.transcript) {
-                        transcriptResult = {
-                            transcript: data.transcript,
-                            method: data.method,
-                            warning: ""
-                        }
-                    }
-
-                } catch (e) {
-                    console.log("[MindVault] DOM scrape failed:", e.message)
-                }
-            }
-
-            // ── METHOD 3 — description fallback ──────────────────
+            // ── DESCRIPTION FALLBACK ──────────────────────────────
             if (!transcriptResult) {
                 try {
                     const descResult = await chrome.scripting.executeScript({
@@ -315,15 +320,10 @@ async function handleMessage(message) {
                             const title = document.title
                                 ?.replace(" - YouTube", "")
                                 ?.trim() || ""
-
-                            // Try multiple selectors — Shorts use different DOM
                             const descEl = document.querySelector(
                                 "#description-inline-expander yt-attributed-string, " +
                                 "#description-inline-expander, " +
-                                "ytd-reel-video-renderer yt-attributed-string#description, " +
-                                "ytd-reel-video-renderer #description, " +
-                                "#shorts-inner-container yt-attributed-string, " +
-                                "ytd-engagement-panel-section-list-renderer #content"
+                                "#description"
                             )
                             const description = descEl?.innerText?.trim() || ""
                             return {
@@ -342,6 +342,15 @@ async function handleMessage(message) {
                     }
                 } catch (e) {
                     console.log("[MindVault] Description fallback failed:", e.message)
+                }
+            }
+
+            // ── NAVIGATE BACK to Shorts if we converted ───────────
+            if (originalUrl) {
+                try {
+                    await chrome.tabs.update(tab.id, { url: originalUrl })
+                } catch (e) {
+                    console.log("[MindVault] Navigate-back failed:", e.message)
                 }
             }
 
