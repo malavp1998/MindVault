@@ -119,6 +119,8 @@ export default function GraphView({
 
     // ── Node painter ─────────────────────────────────────────────────
     const paintNode = useCallback((node, ctx, globalScale) => {
+        if (!isFinite(node.x) || !isFinite(node.y)) return;
+
         const isTopic = node.type === "topic";
         const isHovered = hoveredNode?.id === node.id;
         const isFocused = focusNode?.id === node.id;
