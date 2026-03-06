@@ -102,6 +102,9 @@ async function extractYoutubeTranscript() {
   const descEl = document.querySelector(
     "#description-inline-expander yt-attributed-string, " +
     "#description-inline-expander, " +
+    "ytd-reel-video-renderer yt-attributed-string#description, " +
+    "ytd-reel-video-renderer #description, " +
+    "#shorts-inner-container yt-attributed-string, " +
     "#description"
   )
   const description = descEl?.innerText?.trim() || ""
