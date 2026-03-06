@@ -186,14 +186,19 @@ async def summarize_youtube_note(
     db.add(note)
     await db.flush()
     await db.refresh(note)
+    note_id = note.id
+
+    # CRITICAL: commit the note so process_note()'s own DB session can see it.
+    # process_note() opens an independent async_session() internally — without
+    # this commit, that session cannot read the uncommitted row and silently
+    # returns "Note not found", leaving summary/tags/embedding empty.
+    await db.commit()
 
     # run summarization pipeline synchronously to return processed result
-    # NOTE: process_note expects a UUID; passing a string can prevent the note
-    # from being loaded and will leave it stuck in "Processing".
-    await process_note(note.id)
+    await process_note(note_id)
 
-    # fetch fully processed note with auto_tags populated
-    processed = await db.execute(select(Note).where(Note.id == note.id))
+    # re-fetch the fully processed note (our session's cached object is stale)
+    processed = await db.execute(select(Note).where(Note.id == note_id))
     processed_note = processed.scalar_one()
 
     # Use mode="json" so UUID id is serialized as a plain string,
