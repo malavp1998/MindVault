@@ -5,6 +5,7 @@ Clustering service — UMAP + HDBSCAN pipeline (replaces KMeans).
 Install: pip install umap-learn hdbscan
 """
 
+import asyncio
 import logging
 import uuid
 import numpy as np
@@ -120,7 +121,14 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
                 probabilities = [1.0] * len(notes_db)
                 coords_2d = np.random.randn(len(notes_db), 2) * 100
             else:
-                labels, probabilities, coords_2d = _run_umap_hdbscan(X)
+                try:
+                    labels, probabilities, coords_2d = await asyncio.wait_for(
+                        asyncio.to_thread(_run_umap_hdbscan, X),
+                        timeout=120.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("UMAP/HDBSCAN timed out after 120s — skipping clustering run")
+                    return
 
             logger.info(
                 f"HDBSCAN: {len(notes_db)} notes → "
@@ -141,7 +149,14 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
                 cluster_note_ids = [note_ids[i] for i in cluster_indices]
                 cluster_contents = [contents[i] for i in cluster_indices]
 
-                topic_name = await _generate_topic_name(cluster_contents)
+                try:
+                    topic_name = await asyncio.wait_for(
+                        _generate_topic_name(cluster_contents),
+                        timeout=15.0,
+                    )
+                except (asyncio.TimeoutError, Exception) as e:
+                    logger.warning(f"Topic naming failed ({e}), using fallback name")
+                    topic_name = "General Notes"
                 topic_name = topic_name.strip()[:100]
 
                 # Upsert Topic
@@ -187,12 +202,27 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
 
             # Remove stale Topics no longer in active clusters
             active_cluster_ids = set(unique_cluster_ids)
-            all_topics_res = await db.execute(
-                select(Topic).where(Topic.user_id == user_id)
-            )
-            for topic in all_topics_res.scalars().all():
-                if topic.cluster_id not in active_cluster_ids:
-                    await db.delete(topic)
+            if active_cluster_ids:
+                if user_id is not None:
+                    await db.execute(
+                        text(
+                            "DELETE FROM topics "
+                            "WHERE cluster_id IS NOT NULL "
+                            "AND cluster_id != ALL(:ids) "
+                            "AND user_id = :uid"
+                        ),
+                        {"ids": list(active_cluster_ids), "uid": str(user_id)},
+                    )
+                else:
+                    await db.execute(
+                        text(
+                            "DELETE FROM topics "
+                            "WHERE cluster_id IS NOT NULL "
+                            "AND cluster_id != ALL(:ids) "
+                            "AND user_id IS NULL"
+                        ),
+                        {"ids": list(active_cluster_ids)},
+                    )
 
             await db.commit()
             logger.info("Clustering complete and committed.")
