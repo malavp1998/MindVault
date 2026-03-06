@@ -31,130 +31,143 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true
 })
 
-// ── YouTube Transcript Extraction (ISOLATED world) ────────────
-// Since content scripts can't access page JS variables,
-// we parse <script> tags to find caption track URLs.
+// ── YouTube Transcript Extraction ─────────────────────────────
 
 async function extractYoutubeTranscript() {
+  const videoId = new URLSearchParams(window.location.search).get("v")
+  if (!videoId) {
+    return { transcript: null, error: "No video ID found in URL" }
+  }
+
+  // Method 1 — get caption URL from ytInitialPlayerResponse
   try {
-    // Method 1 — Parse script tags for caption track URLs
-    // YouTube embeds captionTracks data in page source
-    let captionUrl = null
+    let playerResponse = null
 
-    const scripts = document.querySelectorAll("script")
-    for (const script of scripts) {
-      const text = script.textContent
-      if (!text || !text.includes("captionTracks")) continue
-
-      // Find timedtext base URL from the caption tracks JSON
-      const urlMatch = text.match(
-        /"baseUrl":"(https?:\/\/www\.youtube\.com\/api\/timedtext[^"]+)"/
-      )
-      if (urlMatch) {
-        captionUrl = urlMatch[1]
-          .replace(/\\u0026/g, "&")
-          .replace(/\\u003d/g, "=")
-        break
+    // try window global first (MAIN world injection may have set it)
+    if (window.ytInitialPlayerResponse) {
+      playerResponse = window.ytInitialPlayerResponse
+    } else {
+      // search all scripts on page
+      const scripts = Array.from(document.querySelectorAll("script"))
+      for (const script of scripts) {
+        const text = script.textContent || ""
+        if (text.includes("captionTracks")) {
+          const match = text.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/)
+          if (match) {
+            try { playerResponse = JSON.parse(match[1]) } catch { }
+            break
+          }
+        }
       }
     }
 
-    // Method 2 — Fetch transcript from caption URL
-    if (captionUrl) {
-      const transcript = await fetchTranscriptFromUrl(captionUrl)
-      if (transcript) {
-        return { transcript, method: "caption_tracks" }
+    if (playerResponse) {
+      const tracks = playerResponse
+        ?.captions
+        ?.playerCaptionsTracklistRenderer
+        ?.captionTracks
+
+      if (tracks && tracks.length > 0) {
+        // prefer english manual captions, then english auto, then any
+        const track =
+          tracks.find(t => t.languageCode === "en" && !t.kind) ||
+          tracks.find(t => t.languageCode === "en") ||
+          tracks.find(t => t.languageCode?.startsWith("en")) ||
+          tracks[0]
+
+        const captionUrl = track.baseUrl
+
+        // fetch as JSON3 first
+        const res = await fetch(captionUrl + "&fmt=json3")
+        if (res.ok) {
+          const data = await res.json()
+          const text = data.events
+            ?.filter(e => e.segs)
+            ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
+            ?.join(" ")
+            ?.replace(/\s+/g, " ")
+            ?.trim()
+
+          if (text && text.length > 100) {
+            return { transcript: text, method: "caption_tracks_json3" }
+          }
+        }
+
+        // fallback to XML format
+        const resXml = await fetch(captionUrl)
+        if (resXml.ok) {
+          const xml = await resXml.text()
+          const parser = new DOMParser()
+          const doc = parser.parseFromString(xml, "text/xml")
+          const text = Array.from(doc.querySelectorAll("text"))
+            .map(el => el.textContent
+              .replace(/&amp;/g, "&")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&#39;/g, "'")
+              .replace(/&quot;/g, '"')
+            )
+            .join(" ")
+            .trim()
+
+          if (text && text.length > 100) {
+            return { transcript: text, method: "caption_tracks_xml" }
+          }
+        }
       }
     }
-
-    // Method 3 — Try timedtext API directly with video ID
-    const videoId = new URLSearchParams(window.location.search).get("v")
-    if (videoId) {
-      const transcript = await fetchTimedText(videoId)
-      if (transcript) {
-        return { transcript, method: "timedtext_api" }
-      }
-    }
-
-    // Method 4 — Fallback to video description + title
-    const title = document.title?.replace(" - YouTube", "") || ""
-    const description = document.querySelector(
-      "#description-inline-expander, #description"
-    )?.innerText || ""
-
-    if (title || description) {
-      return {
-        transcript: `Video: ${title}\n\nDescription:\n${description}`,
-        method: "description_fallback",
-        warning: "Full transcript unavailable — summarizing from description only"
-      }
-    }
-
-    return { transcript: null, error: "Could not extract any content" }
-
   } catch (e) {
-    return { transcript: null, error: e.message }
+    console.log("[MindVault] Method 1 failed:", e.message)
   }
-}
 
-async function fetchTranscriptFromUrl(captionUrl) {
+  // Method 2 — timedtext API directly with known params
   try {
-    // Try XML format first (default)
-    const resp = await fetch(captionUrl)
-    const text = await resp.text()
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(text, "text/xml")
-    const segments = doc.querySelectorAll("text")
+    const urls = [
+      `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=json3`,
+      `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en-US&fmt=json3`,
+      `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=json3`,
+    ]
 
-    if (segments.length > 0) {
-      return Array.from(segments)
-        .map(s => s.textContent
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&#39;/g, "'")
-          .replace(/&quot;/g, '"')
-        )
-        .join(" ")
-        .replace(/\n/g, " ")
-        .trim()
+    for (const url of urls) {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) continue
+        const data = await res.json()
+        const text = data.events
+          ?.filter(e => e.segs)
+          ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
+          ?.join(" ")
+          ?.replace(/\s+/g, " ")
+          ?.trim()
+
+        if (text && text.length > 100) {
+          return { transcript: text, method: "timedtext_direct" }
+        }
+      } catch { }
     }
-  } catch { }
-
-  try {
-    // Try JSON3 format
-    const separator = captionUrl.includes("?") ? "&" : "?"
-    const resp = await fetch(captionUrl + separator + "fmt=json3")
-    const data = await resp.json()
-    return (data.events || [])
-      .filter(e => e.segs)
-      .map(e => e.segs.map(s => s.utf8).join(""))
-      .join(" ")
-      .replace(/\n/g, " ")
-      .trim()
-  } catch { }
-
-  return null
-}
-
-async function fetchTimedText(videoId) {
-  // Try common languages
-  const langs = ["en", "en-US", "hi", ""]
-  for (const lang of langs) {
-    try {
-      const params = new URLSearchParams({ v: videoId, fmt: "json3" })
-      if (lang) params.set("lang", lang)
-      const url = `https://www.youtube.com/api/timedtext?${params}`
-      const resp = await fetch(url)
-      if (!resp.ok) continue
-      const data = await resp.json()
-      const text = (data.events || [])
-        .filter(e => e.segs)
-        .map(e => e.segs.map(s => s.utf8).join(""))
-        .join(" ")
-        .replace(/\n/g, " ")
-        .trim()
-      if (text) return text
-    } catch { }
+  } catch (e) {
+    console.log("[MindVault] Method 2 failed:", e.message)
   }
-  return null
+
+  // Method 3 — description fallback
+  const title = document.title?.replace(" - YouTube", "").trim() || ""
+  const descEl = document.querySelector(
+    "#description-inline-expander yt-attributed-string, " +
+    "#description-inline-expander, " +
+    "#description"
+  )
+  const description = descEl?.innerText?.trim() || ""
+
+  if (title || description) {
+    return {
+      transcript: `Video Title: ${title}\n\nDescription:\n${description}`.trim(),
+      method: "description_fallback",
+      warning: "Full transcript unavailable — summarizing from title and description only"
+    }
+  }
+
+  return {
+    transcript: null,
+    error: "No transcript or description found for this video"
+  }
 }

@@ -188,16 +188,16 @@ async def summarize_youtube_note(
     await db.refresh(note)
 
     # run summarization pipeline synchronously to return processed result
-    # (or we could return immediately and process async, but user example implies sync)
     await process_note(str(note.id))
 
-    # fetch processed note with tags
+    # fetch fully processed note with auto_tags populated
     processed = await db.execute(select(Note).where(Note.id == note.id))
     processed_note = processed.scalar_one()
 
-    # The user spec asks for a dict return with extra warning/method fields
-    out_dict = _note_to_out(processed_note).model_dump()
-    out_dict["warning"] = req.warning
+    # Use mode="json" so UUID id is serialized as a plain string,
+    # ensuring popup.js can build the note link correctly (Bug 2 fix)
+    out_dict = _note_to_out(processed_note).model_dump(mode="json")
+    out_dict["warning"] = req.warning or ""
     out_dict["extraction_method"] = req.extraction_method
 
     return out_dict

@@ -218,47 +218,79 @@ async function handleSummarizeYoutube() {
     btn.textContent = "Extracting transcript..."
 
     try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        const [tab] = await chrome.tabs.query({
+            active: true, currentWindow: true
+        })
 
         const result = await sendMessage({
             type: "SUMMARIZE_YOUTUBE",
             videoUrl: currentTab?.url,
-            videoTitle: currentTab?.title?.replace(" - YouTube", "") || "",
+            videoTitle: currentTab?.title?.replace(" - YouTube", "").trim() || "",
             annotation,
             tabId: tab.id
         })
 
-        btn.disabled = false
-        btn.textContent = "Summarize & Save"
-
         if (result?.ok) {
-            document.getElementById("save-form").classList.add("hidden")
+            const note = result.data
+
+            // hide youtube banner
             document.getElementById("youtube-banner").classList.add("hidden")
+
+            // show success result
             const resultEl = document.getElementById("save-result")
             resultEl.classList.remove("hidden")
-            const tagsEl = document.getElementById("result-tags")
-            const note = result.data
-            tagsEl.innerHTML = (note.auto_tags || [])
-                .map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`).join("")
 
-            // Show warning if fallback was used
+            // show tags
+            const tagsEl = document.getElementById("result-tags")
+            tagsEl.innerHTML = (note.auto_tags || [])
+                .map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`)
+                .join("")
+
+            // show warning if description fallback — remove any existing first
+            const existingWarn = resultEl.querySelector(".warn-msg")
+            if (existingWarn) existingWarn.remove()
+
             if (note.warning) {
                 const warnEl = document.createElement("div")
-                warnEl.style.cssText = "color:#fbbf24;font-size:11px;margin-top:8px;line-height:1.4;"
+                warnEl.className = "warn-msg"
+                warnEl.style.cssText = "color:#fbbf24;font-size:10px;margin-top:6px;"
                 warnEl.textContent = "⚠️ " + note.warning
                 resultEl.appendChild(warnEl)
             }
+
+            // IMPORTANT — add clickable link using REAL note ID from backend
+            // note.id is the actual PostgreSQL UUID returned from the server
+            if (note.id) {
+                const existingLink = resultEl.querySelector(".note-link")
+                if (existingLink) existingLink.remove()
+
+                const linkEl = document.createElement("div")
+                linkEl.className = "note-link"
+                linkEl.style.cssText = "margin-top:8px;cursor:pointer;color:#a78bfa;font-size:11px;"
+                linkEl.textContent = "→ Open in vault"
+                linkEl.addEventListener("click", () => {
+                    chrome.tabs.create({
+                        url: `https://mind-vault-ecru.vercel.app/note/${note.id}`
+                    })
+                })
+                resultEl.appendChild(linkEl)
+            }
+
         } else if (result?.status === 401) {
             showScreen("login")
         } else {
-            const errorMsg = result?.data?.detail || result?.error || "Failed to summarize video. Please try again."
-            alert(`❌ ${errorMsg}`)
+            const errorEl = document.getElementById("login-error")
+            errorEl.textContent = result?.error ||
+                "Failed to summarize. Video may not have captions."
+            errorEl.classList.remove("hidden")
+            setTimeout(() => errorEl.classList.add("hidden"), 5000)
         }
+
     } catch (err) {
+        console.error("[MindVault] Summarize failed:", err)
+    } finally {
         btn.disabled = false
         btn.textContent = "Summarize & Save"
-        alert("❌ Could not reach MindVault server. Check your connection and try again.")
-        console.error("[MindVault] YouTube summarize error:", err)
     }
 }
 
