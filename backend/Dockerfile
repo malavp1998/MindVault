@@ -3,9 +3,15 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install system dependencies, including ffmpeg for yt-dlp/whisper
+# and build deps for umap-learn / hdbscan
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
     ffmpeg \
+    python3-dev \
+    gfortran \
+    liblapack-dev \
+    libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

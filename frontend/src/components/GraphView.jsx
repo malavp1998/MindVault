@@ -1,62 +1,104 @@
 import ForceGraph2D from "react-force-graph-2d";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 
 /**
- * Obsidian-style force-directed graph canvas.
- * Topics render as large glowing purple orbs; notes as small dark dots.
- * Hover highlights connected neighbors. Click fires onNodeClick.
+ * Obsidian-level knowledge graph.
+ *
+ * Features:
+ * - Node size scales with connection degree
+ * - Per-topic color coding (notes inherit topic color)
+ * - Edge types: topic_link (purple), semantic_link (blue), tag_link (gray), backlink (green)
+ * - Local graph mode: click node → show N-hop neighborhood only
+ * - UMAP 2D coords used as initial positions
+ * - Outlier notes (no topic) rendered as dimmed gray
  */
-export default function GraphView({ data, onNodeClick }) {
+export default function GraphView({
+    data,
+    onNodeClick,
+    localMode = false,
+    localDepth = 2,
+    showEdgeTypes = { topic_link: true, semantic_link: true, tag_link: false, backlink: true },
+}) {
     const graphRef = useRef();
     const [hoveredNode, setHoveredNode] = useState(null);
-    const [selectedNode, setSelectedNode] = useState(null);
-
-    // Build adjacency set for fast highlight lookup
-    const connectedSet = useCallback(
-        (node) => {
-            const ids = new Set([node.id]);
-            const ls = new Set();
-            data.links.forEach((link) => {
-                const srcId = link.source?.id ?? link.source;
-                const tgtId = link.target?.id ?? link.target;
-                if (srcId === node.id) { ids.add(tgtId); ls.add(link); }
-                if (tgtId === node.id) { ids.add(srcId); ls.add(link); }
-            });
-            return { ids, ls };
-        },
-        [data.links]
-    );
-
+    const [focusNode, setFocusNode] = useState(null);  // local graph center
     const [hlNodes, setHlNodes] = useState(new Set());
     const [hlLinks, setHlLinks] = useState(new Set());
 
-    const handleNodeHover = useCallback(
-        (node) => {
-            if (node) {
-                const { ids, ls } = connectedSet(node);
-                setHlNodes(ids);
-                setHlLinks(ls);
-            } else {
-                setHlNodes(new Set());
-                setHlLinks(new Set());
-            }
-            setHoveredNode(node || null);
-        },
-        [connectedSet]
-    );
+    // ── Filter data by edge type visibility ──────────────────────────
+    const filteredData = useMemo(() => {
+        const visibleLinks = data.links.filter(l => showEdgeTypes[l.type] !== false);
+        const visibleNodeIds = new Set(data.nodes.map(n => n.id));
+        return { nodes: data.nodes, links: visibleLinks };
+    }, [data, showEdgeTypes]);
 
-    const handleNodeClick = useCallback(
-        (node) => {
-            setSelectedNode(node);
-            onNodeClick?.(node);
-            // Smooth zoom to node
+    // ── Local graph: N-hop neighborhood of focusNode ─────────────────
+    const localData = useMemo(() => {
+        if (!focusNode) return filteredData;
+
+        let frontier = new Set([focusNode.id]);
+        let visited = new Set([focusNode.id]);
+
+        for (let depth = 0; depth < localDepth; depth++) {
+            const next = new Set();
+            filteredData.links.forEach(l => {
+                const s = l.source?.id ?? l.source;
+                const t = l.target?.id ?? l.target;
+                if (frontier.has(s)) next.add(t);
+                if (frontier.has(t)) next.add(s);
+            });
+            next.forEach(n => visited.add(n));
+            frontier = next;
+        }
+
+        const visibleNodes = filteredData.nodes.filter(n => visited.has(n.id));
+        const visibleLinks = filteredData.links.filter(l => {
+            const s = l.source?.id ?? l.source;
+            const t = l.target?.id ?? l.target;
+            return visited.has(s) && visited.has(t);
+        });
+
+        return { nodes: visibleNodes, links: visibleLinks };
+    }, [focusNode, filteredData, localDepth]);
+
+    // ── Adjacency for hover highlight ────────────────────────────────
+    const connectedSet = useCallback((node) => {
+        const ids = new Set([node.id]);
+        const ls = new Set();
+        localData.links.forEach(l => {
+            const s = l.source?.id ?? l.source;
+            const t = l.target?.id ?? l.target;
+            if (s === node.id) { ids.add(t); ls.add(l); }
+            if (t === node.id) { ids.add(s); ls.add(l); }
+        });
+        return { ids, ls };
+    }, [localData.links]);
+
+    const handleNodeHover = useCallback((node) => {
+        if (node) {
+            const { ids, ls } = connectedSet(node);
+            setHlNodes(ids);
+            setHlLinks(ls);
+        } else {
+            setHlNodes(new Set());
+            setHlLinks(new Set());
+        }
+        setHoveredNode(node || null);
+    }, [connectedSet]);
+
+    const handleNodeClick = useCallback((node) => {
+        // Toggle local graph focus
+        if (focusNode?.id === node.id) {
+            setFocusNode(null);
+        } else {
+            setFocusNode(node);
             if (graphRef.current) {
-                graphRef.current.centerAt(node.x, node.y, 800);
-                graphRef.current.zoom(3.5, 800);
+                graphRef.current.centerAt(node.x, node.y, 600);
+                graphRef.current.zoom(3.5, 700);
             }
-        },
-        [onNodeClick]
-    );
+        }
+        onNodeClick?.(node);
+    }, [focusNode, onNodeClick]);
 
     const handleNodeDblClick = useCallback((node) => {
         if (node.type === "note") {
@@ -64,98 +106,134 @@ export default function GraphView({ data, onNodeClick }) {
         }
     }, []);
 
-    // ─── Canvas Painter ────────────────────────────────────────
-    const paintNode = useCallback(
-        (node, ctx, globalScale) => {
-            const isTopic = node.type === "topic";
-            const isHovered = hoveredNode?.id === node.id;
-            const isSelected = selectedNode?.id === node.id;
-            const isHighlighted = hlNodes.has(node.id);
-            const isDimmed = hlNodes.size > 0 && !isHighlighted;
+    // ── Seed initial positions from UMAP coords ──────────────────────
+    // Scale UMAP space (approx -5..5) to canvas space
+    const UMAP_SCALE = 180;
+    const seededNodes = useMemo(() => {
+        return localData.nodes.map(n => ({
+            ...n,
+            x: n.graph_x != null ? n.graph_x * UMAP_SCALE : n.x,
+            y: n.graph_y != null ? n.graph_y * UMAP_SCALE : n.y,
+        }));
+    }, [localData.nodes]);
 
-            // Size: topics scale with note_count, notes are small dots
-            const size = isTopic
-                ? Math.max(10, Math.min(24, (node.count || 1) * 2 + 8))
-                : 4;
+    // ── Node painter ─────────────────────────────────────────────────
+    const paintNode = useCallback((node, ctx, globalScale) => {
+        const isTopic = node.type === "topic";
+        const isHovered = hoveredNode?.id === node.id;
+        const isFocused = focusNode?.id === node.id;
+        const isHighlighted = hlNodes.has(node.id);
+        const isDimmed = hlNodes.size > 0 && !isHighlighted;
+        const isOutlier = node.is_outlier;
 
-            // Base color
-            let color = isTopic ? "#7C3AED" : "#4B5563";
-            if (isHighlighted) color = isTopic ? "#A78BFA" : "#9CA3AF";
-            if (isHovered) color = "#F59E0B";
-            if (isSelected) color = "#10B981";
-            if (isDimmed) {
-                ctx.globalAlpha = 0.15;
-            } else {
-                ctx.globalAlpha = 1;
-            }
+        // Size: topics by note_count, notes by degree
+        const degree = node.degree || 0;
+        const size = isTopic
+            ? Math.max(12, Math.min(28, (node.count || 1) * 2.5 + 10))
+            : Math.max(3.5, Math.min(11, degree * 1.8 + 3.5));
 
-            // Glow for hovered/selected
-            if (isHovered || isSelected) {
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = color;
-            } else if (isTopic) {
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = "#7C3AED";
-            } else {
-                ctx.shadowBlur = 0;
-            }
+        // Color
+        let baseColor = node.color || (isTopic ? "#7C3AED" : "#4B5563");
+        if (isOutlier) baseColor = "#374151";
 
-            // Draw circle
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
-            ctx.fillStyle = color;
-            ctx.fill();
+        const alpha = isDimmed ? 0.15 : 1.0;
+        ctx.globalAlpha = alpha;
 
-            // Ring on topics
-            if (isTopic) {
-                ctx.strokeStyle = isHovered ? "#F59E0B" : "#A78BFA";
-                ctx.lineWidth = isHovered ? 2.5 : 1.5;
-                ctx.stroke();
-            }
-
+        // Glow for highlighted / focused
+        if ((isHighlighted || isFocused) && !isDimmed) {
+            ctx.shadowColor = isTopic ? baseColor : "#A78BFA";
+            ctx.shadowBlur = isTopic ? 18 : 10;
+        } else {
             ctx.shadowBlur = 0;
-            ctx.globalAlpha = 1;
+        }
 
-            // Labels — always for topics; for notes only on hover or high zoom
-            if (isTopic || isHovered || isSelected || globalScale > 2.5) {
-                const fontSize = isTopic
-                    ? Math.max(10, 13 / globalScale)
-                    : Math.max(7, 9 / globalScale);
-                ctx.font = `${isTopic ? "600 " : ""}${fontSize}px Inter, sans-serif`;
-                ctx.fillStyle = isDimmed
-                    ? "rgba(255,255,255,0.1)"
-                    : isTopic
-                        ? isHovered || isSelected ? "#FFFFFF" : "#E5E7EB"
-                        : "#9CA3AF";
-                ctx.textAlign = "center";
-                const label =
-                    node.label.length > 22
-                        ? node.label.slice(0, 22) + "…"
-                        : node.label;
-                ctx.fillText(label, node.x, node.y + size + fontSize + 2);
-            }
-        },
-        [hoveredNode, selectedNode, hlNodes]
-    );
+        // Draw circle
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
 
-    // ─── Link Painter ──────────────────────────────────────────
-    const paintLink = useCallback(
-        (link, ctx) => {
-            const isHl = hlLinks.has(link);
-            const isTagLink = link.type === "tag_link";
+        if (isTopic) {
+            // Radial gradient for topic nodes
+            const gradient = ctx.createRadialGradient(
+                node.x - size * 0.3, node.y - size * 0.3, 0,
+                node.x, node.y, size
+            );
+            gradient.addColorStop(0, lighten(baseColor, 0.3));
+            gradient.addColorStop(1, baseColor);
+            ctx.fillStyle = gradient;
+        } else {
+            ctx.fillStyle = isHovered ? "#F9FAFB" : (isHighlighted ? lighten(baseColor, 0.4) : baseColor);
+        }
+        ctx.fill();
 
-            ctx.globalAlpha = isHl ? 0.9 : isTagLink ? 0.15 : 0.4;
-            ctx.strokeStyle = isHl ? "#A78BFA" : isTagLink ? "#374151" : "#4B5563";
-            ctx.lineWidth = isHl ? 1.5 : isTagLink ? 0.4 : 0.7;
-        },
-        [hlLinks]
-    );
+        // Ring for selected focus node
+        if (isFocused) {
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 1.5 / globalScale;
+            ctx.stroke();
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1.0;
+
+        // Label
+        const showLabel = isTopic || isHighlighted || isHovered || globalScale > 2.5;
+        if (showLabel && !isDimmed) {
+            const fontSize = isTopic
+                ? Math.max(10, 13 / globalScale)
+                : Math.max(8, 10 / globalScale);
+            ctx.font = `${isTopic ? 600 : 400} ${fontSize}px Inter, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = isTopic ? "#E9D5FF" : "#D1D5DB";
+            ctx.globalAlpha = isDimmed ? 0.1 : (isHighlighted ? 1 : 0.85);
+            const label = node.label?.length > 28 ? node.label.slice(0, 26) + "…" : (node.label || "");
+            ctx.fillText(label, node.x, node.y + size + 3);
+            ctx.globalAlpha = 1.0;
+        }
+    }, [hoveredNode, focusNode, hlNodes]);
+
+    // ── Link painter ─────────────────────────────────────────────────
+    const paintLink = useCallback((link, ctx) => {
+        const isHl = hlLinks.has(link);
+        const type = link.type;
+
+        const styles = {
+            topic_link: { color: "#7C3AED", width: 1.2, opacity: 0.5 },
+            semantic_link: { color: "#3B82F6", width: (link.weight || 0.75) * 2, opacity: 0.45 },
+            tag_link: { color: "#374151", width: 0.5, opacity: 0.2 },
+            backlink: { color: "#10B981", width: 1.2, opacity: 0.65 },
+        };
+        const s = styles[type] ?? { color: "#4B5563", width: 0.7, opacity: 0.25 };
+
+        ctx.globalAlpha = isHl ? Math.min(s.opacity * 2, 1) : s.opacity;
+        ctx.strokeStyle = isHl ? lighten(s.color, 0.4) : s.color;
+        ctx.lineWidth = isHl ? s.width * 2 : s.width;
+
+        // Dashed for tag links
+        if (type === "tag_link") {
+            ctx.setLineDash([2, 4]);
+        } else {
+            ctx.setLineDash([]);
+        }
+    }, [hlLinks]);
 
     return (
-        <div style={{ width: "100%", height: "100%", background: "#030712", borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ width: "100%", height: "100%", background: "#030712", borderRadius: 16, overflow: "hidden", position: "relative" }}>
+            {/* Focus indicator */}
+            {focusNode && (
+                <div style={{
+                    position: "absolute", bottom: 60, left: "50%", transform: "translateX(-50%)",
+                    zIndex: 30, background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.4)",
+                    borderRadius: 20, padding: "6px 16px", fontSize: 12, color: "#A78BFA",
+                    backdropFilter: "blur(8px)", pointerEvents: "none",
+                }}>
+                    🔍 Local view · {focusNode.label?.slice(0, 30)} · click again to exit
+                </div>
+            )}
+
             <ForceGraph2D
                 ref={graphRef}
-                graphData={data}
+                graphData={{ nodes: seededNodes, links: localData.links }}
                 nodeCanvasObject={paintNode}
                 nodeCanvasObjectMode={() => "replace"}
                 linkCanvasObjectMode={() => "after"}
@@ -163,17 +241,28 @@ export default function GraphView({ data, onNodeClick }) {
                 onNodeHover={handleNodeHover}
                 onNodeClick={handleNodeClick}
                 onNodeRightClick={handleNodeDblClick}
-                linkDirectionalParticles={(link) => (hlLinks.has(link) ? 3 : 0)}
-                linkDirectionalParticleSpeed={0.005}
+                // Directional particles on highlighted edges
+                linkDirectionalParticles={link => (hlLinks.has(link) ? 3 : 0)}
+                linkDirectionalParticleSpeed={0.004}
                 linkDirectionalParticleWidth={2}
+                linkDirectionalParticleColor={link => link.type === "semantic_link" ? "#60A5FA" : "#A78BFA"}
                 backgroundColor="#030712"
-                cooldownTicks={120}
-                d3AlphaDecay={0.02}
-                d3VelocityDecay={0.25}
-                // Stronger repulsion for topic nodes
-                nodeRelSize={1}
+                cooldownTicks={200}
+                d3AlphaDecay={0.015}
+                d3VelocityDecay={0.3}
+                // Stronger repulsion for more spread
                 d3Force="charge"
+                nodeRelSize={1}
             />
         </div>
     );
+}
+
+// ── Color utilities ────────────────────────────────────────────────────────
+function lighten(hex, amount) {
+    const num = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, (num >> 16) + Math.round(255 * amount));
+    const g = Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * amount));
+    const b = Math.min(255, (num & 0xff) + Math.round(255 * amount));
+    return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }

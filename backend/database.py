@@ -43,6 +43,9 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
+        # Add graph coordinate columns if they don't exist (for existing DBs)
+        await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_x FLOAT"))
+        await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_y FLOAT"))
 
 
 async def get_db() -> AsyncSession:

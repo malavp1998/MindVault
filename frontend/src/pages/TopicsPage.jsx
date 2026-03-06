@@ -15,6 +15,15 @@ export default function TopicsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [filterType, setFilterType] = useState("all");
     const [reclustering, setReclustering] = useState(false);
+    const [localMode, setLocalMode] = useState(false);
+    const [localDepth, setLocalDepth] = useState(2);
+    const [showEdgeTypes, setShowEdgeTypes] = useState({
+        topic_link: true,
+        semantic_link: true,
+        tag_link: false,
+        backlink: true,
+    });
+    const [semanticThreshold, setSemanticThreshold] = useState(75);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -28,7 +37,7 @@ export default function TopicsPage() {
     async function loadGraph() {
         setLoading(true);
         try {
-            const res = await api.get('/graph/data');
+            const res = await api.get(`/graph/data?semantic_threshold=${semanticThreshold / 100}`);
             const data = res.data;
             setGraphData(data);
             setFilteredData(data);
@@ -38,6 +47,11 @@ export default function TopicsPage() {
             setLoading(false);
         }
     }
+
+    useEffect(() => {
+        const timer = setTimeout(() => loadGraph(), 600);
+        return () => clearTimeout(timer);
+    }, [semanticThreshold]);
 
     function applyFilters(query, type) {
         const visibleNodes = graphData.nodes.filter((n) => {
@@ -165,38 +179,63 @@ export default function TopicsPage() {
                     <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{noteCount}</span> notes
                 </div>
 
-                {/* Legend */}
+                {/* Edge type toggles */}
                 <div style={{
                     position: "absolute", bottom: 16, left: 16, zIndex: 20,
-                    background: "rgba(17,24,39,0.9)", border: "1px solid #1F2937",
-                    borderRadius: 10, padding: "12px 16px", fontSize: 12, color: "#6B7280",
-                    display: "flex", flexDirection: "column", gap: 6,
-                    backdropFilter: "blur(8px)",
+                    background: "rgba(17,24,39,0.92)", border: "1px solid #1F2937",
+                    borderRadius: 12, padding: "14px 16px", fontSize: 12, color: "#6B7280",
+                    display: "flex", flexDirection: "column", gap: 10,
+                    backdropFilter: "blur(8px)", minWidth: 200,
                 }}>
+                    <div style={{ color: "#9CA3AF", fontWeight: 600, marginBottom: 2 }}>Edge Types</div>
+
                     {[
-                        { color: "#7C3AED", size: 12, label: "Topic cluster" },
-                        { color: "#4B5563", size: 8, label: "Note" },
-                        { color: "#F59E0B", size: 0, label: "Hovered node" },
-                        { color: "#10B981", size: 0, label: "Selected node" },
-                    ].map(({ color, size, label }) => (
-                        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            {size > 0 ? (
-                                <div style={{
-                                    width: size, height: size, borderRadius: "50%",
-                                    background: color, boxShadow: `0 0 6px ${color}`,
-                                    flexShrink: 0,
-                                }} />
-                            ) : (
-                                <div style={{
-                                    width: 12, height: 12, borderRadius: "50%",
-                                    border: `2px solid ${color}`, flexShrink: 0,
-                                }} />
-                            )}
+                        { key: "topic_link", color: "#7C3AED", label: "Topic clusters" },
+                        { key: "semantic_link", color: "#3B82F6", label: "Semantic similarity" },
+                        { key: "tag_link", color: "#374151", label: "Shared tags" },
+                        { key: "backlink", color: "#10B981", label: "Backlinks" },
+                    ].map(({ key, color, label }) => (
+                        <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                            <input
+                                type="checkbox"
+                                checked={showEdgeTypes[key] !== false}
+                                onChange={e => setShowEdgeTypes(prev => ({ ...prev, [key]: e.target.checked }))}
+                                style={{ accentColor: color }}
+                            />
+                            <span style={{ width: 12, height: 2, background: color, display: "inline-block", borderRadius: 1 }} />
                             <span>{label}</span>
-                        </div>
+                        </label>
                     ))}
+
+                    <div style={{ borderTop: "1px solid #1F2937", paddingTop: 8, marginTop: 2 }}>
+                        <div style={{ color: "#9CA3AF", fontWeight: 600, marginBottom: 6 }}>
+                            Semantic threshold: {semanticThreshold}%
+                        </div>
+                        <input
+                            type="range" min={60} max={95} value={semanticThreshold}
+                            onChange={e => setSemanticThreshold(Number(e.target.value))}
+                            style={{ width: "100%", accentColor: "#3B82F6" }}
+                        />
+                    </div>
+
+                    <div style={{ borderTop: "1px solid #1F2937", paddingTop: 8, marginTop: 2 }}>
+                        <div style={{ color: "#9CA3AF", fontWeight: 600, marginBottom: 6 }}>Local graph depth</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                            {[1, 2, 3].map(d => (
+                                <button key={d} onClick={() => setLocalDepth(d)} style={{
+                                    padding: "4px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer",
+                                    background: localDepth === d ? "rgba(124,58,237,0.3)" : "transparent",
+                                    border: `1px solid ${localDepth === d ? "rgba(124,58,237,0.6)" : "#374151"}`,
+                                    color: localDepth === d ? "#A78BFA" : "#6B7280",
+                                }}>
+                                    {d}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div style={{ borderTop: "1px solid #1F2937", paddingTop: 6, marginTop: 2, fontSize: 11, color: "#4B5563" }}>
-                        Hover → highlight · Click → details · Right-click → open note
+                        Hover → highlight · Click → local graph · Right-click → open note
                     </div>
                 </div>
 
@@ -225,13 +264,19 @@ export default function TopicsPage() {
                                     padding: "10px 20px", borderRadius: 10, fontSize: 14, cursor: "pointer",
                                 }}
                             >
-                                🧪 Run KMeans Clustering
+                                🧪 Run UMAP + HDBSCAN Clustering
                             </button>
                         )}
                     </div>
                 )}
 
-                <GraphView data={filteredData} onNodeClick={handleNodeClick} />
+                <GraphView
+                    data={filteredData}
+                    onNodeClick={handleNodeClick}
+                    localMode={localMode}
+                    localDepth={localDepth}
+                    showEdgeTypes={showEdgeTypes}
+                />
             </div>
 
             {/* ──────────────── Side Panel ──────────────── */}

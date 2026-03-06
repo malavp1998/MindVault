@@ -88,6 +88,8 @@ class Note(Base):
     )
     embedding = mapped_column(Vector(1536), nullable=True)
     is_processed: Mapped[bool] = mapped_column(default=False)
+    graph_x: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    graph_y: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -115,7 +117,7 @@ class Topic(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    cluster_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, nullable=True)
+    cluster_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     centroid = mapped_column(Vector(1536), nullable=True)
     note_count: Mapped[int] = mapped_column(Integer, default=0)
