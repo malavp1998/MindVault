@@ -46,11 +46,13 @@ async def process_note(note_id: uuid.UUID) -> None:
     # --- Step 2: Run ALL AI calls OUTSIDE any DB transaction ---
     full_text = f"{title}\n\n{content}"
 
+    embedding: list[float] | None = None
     try:
         embedding = await get_embedding(full_text)
     except Exception as e:
+        # Embeddings are used for similarity search/linking/clustering, but we can still
+        # generate summaries/tags so the note doesn't stay stuck in "Processing".
         logger.error(f"Embedding failed for note {note_id}: {e}", exc_info=True)
-        return  # Cannot proceed without embedding
 
     summary = content[:300] + "..."
     lang = detect_language(content)
@@ -73,7 +75,8 @@ async def process_note(note_id: uuid.UUID) -> None:
             if not note:
                 return
 
-            note.embedding = embedding
+            if embedding is not None:
+                note.embedding = embedding
             note.summary = summary
             note.key_concepts = key_concepts
             note.language = lang
@@ -85,12 +88,13 @@ async def process_note(note_id: uuid.UUID) -> None:
             except Exception as e:
                 logger.warning(f"Auto-tagging failed: {e}")
 
-            # Bidirectional links
-            try:
-                async with db.begin_nested():
-                    await _create_links(db, note_id, embedding)
-            except Exception as e:
-                logger.warning(f"Link creation failed: {e}")
+            # Bidirectional links (requires embedding)
+            if embedding is not None:
+                try:
+                    async with db.begin_nested():
+                        await _create_links(db, note_id, embedding)
+                except Exception as e:
+                    logger.warning(f"Link creation failed: {e}")
 
             note.is_processed = True
             note.processed = True

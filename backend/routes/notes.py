@@ -188,7 +188,9 @@ async def summarize_youtube_note(
     await db.refresh(note)
 
     # run summarization pipeline synchronously to return processed result
-    await process_note(str(note.id))
+    # NOTE: process_note expects a UUID; passing a string can prevent the note
+    # from being loaded and will leave it stuck in "Processing".
+    await process_note(note.id)
 
     # fetch fully processed note with auto_tags populated
     processed = await db.execute(select(Note).where(Note.id == note.id))
