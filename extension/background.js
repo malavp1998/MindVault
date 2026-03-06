@@ -178,19 +178,18 @@ async function handleMessage(message) {
 
             let transcriptResult = null
 
-            // ── STEP 1 — get caption URL from MAIN world ──────
-            // executeScript with world:MAIN has access to
-            // #movie_player.getPlayerResponse() unlike content scripts
+            // single MAIN world execution — get URL and fetch immediately
+            // no delay between getting URL and using it — never expires
             try {
                 const mainWorldResult = await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
                     world: "MAIN",
-                    func: () => {
-                        // small retry loop for SPA navigation timing
-                        // captions may not be ready immediately
-                        const getTrack = () => {
+                    func: async () => {
+                        try {
                             const player = document.querySelector("#movie_player")
-                            if (!player?.getPlayerResponse) return null
+                            if (!player?.getPlayerResponse) {
+                                return { error: "movie_player not found" }
+                            }
 
                             const tracks = player
                                 .getPlayerResponse()
@@ -198,129 +197,110 @@ async function handleMessage(message) {
                                 ?.playerCaptionsTracklistRenderer
                                 ?.captionTracks
 
-                            if (!tracks?.length) return null
+                            if (!tracks?.length) {
+                                return { error: "No caption tracks found" }
+                            }
 
                             // prefer english manual captions
                             // then english auto-generated
                             // then first available language
-                            return (
+                            const track =
                                 tracks.find(t => t.languageCode === "en" && !t.kind) ||
                                 tracks.find(t => t.languageCode === "en") ||
                                 tracks.find(t => t.languageCode?.startsWith("en")) ||
                                 tracks[0]
-                            )
-                        }
 
-                        const track = getTrack()
-                        if (!track) return null
+                            console.log("[MindVault] Using track:", track.languageCode, track.name?.simpleText)
 
-                        return {
-                            captionUrl: track.baseUrl,
-                            languageCode: track.languageCode,
-                            trackName: track.name?.simpleText || ""
+                            // attempt 1 — JSON3 format
+                            try {
+                                const jsonUrl = new URL(track.baseUrl)
+                                jsonUrl.searchParams.set("fmt", "json3")
+
+                                const jsonRes = await fetch(jsonUrl.toString(), {
+                                    credentials: "include"
+                                })
+
+                                const rawText = await jsonRes.text()
+                                console.log("[MindVault] JSON3 response status:", jsonRes.status)
+                                console.log("[MindVault] JSON3 content-type:", jsonRes.headers.get("content-type"))
+
+                                const data = JSON.parse(rawText)
+                                const text = data.events
+                                    ?.filter(e => e.segs)
+                                    ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
+                                    ?.join(" ")
+                                    ?.replace(/\s+/g, " ")
+                                    ?.trim()
+
+                                if (text && text.length > 50) {
+                                    console.log("[MindVault] JSON3 success, length:", text.length)
+                                    return { transcript: text, format: "json3" }
+                                }
+                            } catch (jsonErr) {
+                                console.log("[MindVault] JSON3 failed:", jsonErr.message)
+                            }
+
+                            // attempt 2 — XML format
+                            try {
+                                const xmlUrl = new URL(track.baseUrl)
+                                xmlUrl.searchParams.delete("fmt")
+
+                                const xmlRes = await fetch(xmlUrl.toString(), {
+                                    credentials: "include"
+                                })
+
+                                const xmlText = await xmlRes.text()
+                                console.log("[MindVault] XML response status:", xmlRes.status)
+                                console.log("[MindVault] XML content-type:", xmlRes.headers.get("content-type"))
+                                console.log("[MindVault] XML first 200 chars:", xmlText.slice(0, 200))
+
+                                const parser = new DOMParser()
+                                const doc = parser.parseFromString(xmlText, "text/xml")
+                                const segments = doc.querySelectorAll("text")
+
+                                if (segments.length > 0) {
+                                    const text = Array.from(segments)
+                                        .map(el => el.textContent
+                                            .replace(/&amp;/g, "&")
+                                            .replace(/&lt;/g, "<")
+                                            .replace(/&gt;/g, ">")
+                                            .replace(/&#39;/g, "'")
+                                            .replace(/&quot;/g, '"')
+                                            .trim()
+                                        )
+                                        .filter(Boolean)
+                                        .join(" ")
+                                        .replace(/\s+/g, " ")
+                                        .trim()
+
+                                    if (text && text.length > 50) {
+                                        console.log("[MindVault] XML success, length:", text.length)
+                                        return { transcript: text, format: "xml" }
+                                    }
+                                }
+
+                                console.log("[MindVault] XML had no text segments")
+                            } catch (xmlErr) {
+                                console.log("[MindVault] XML failed:", xmlErr.message)
+                            }
+
+                            return { error: "Could not parse transcript in JSON3 or XML format" }
+
+                        } catch (e) {
+                            return { error: e.message }
                         }
                     }
                 })
 
-                const trackData = mainWorldResult?.[0]?.result
-                console.log("[MindVault] Track data:", trackData)
+                const result = mainWorldResult?.[0]?.result
+                console.log("[MindVault] Main world result:", result)
 
-                if (trackData?.captionUrl) {
-
-                    // ── STEP 2 — fetch transcript using caption URL ──
-                    // fetch runs in ISOLATED world so cookies auto included
-                    const fetchResult = await chrome.scripting.executeScript({
-                        target: { tabId: tab.id },
-                        world: "ISOLATED",
-                        func: async (captionUrl) => {
-                            try {
-                                // set fmt=json3 — YouTube may or may not honor it
-                                const url = new URL(captionUrl)
-                                url.searchParams.set("fmt", "json3")
-
-                                const res = await fetch(url.toString(), {
-                                    credentials: "include"
-                                })
-                                if (!res.ok) return { error: `HTTP ${res.status}` }
-
-                                // read as text first — never assume JSON
-                                const rawText = await res.text()
-
-                                // attempt 1 — parse as JSON3
-                                try {
-                                    const data = JSON.parse(rawText)
-                                    const text = data.events
-                                        ?.filter(e => e.segs)
-                                        ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
-                                        ?.join(" ")
-                                        ?.replace(/\s+/g, " ")
-                                        ?.trim()
-
-                                    if (text && text.length > 50) {
-                                        return { transcript: text, format: "json3" }
-                                    }
-                                } catch (jsonErr) {
-                                    console.log("[MindVault] JSON parse failed, trying XML...")
-                                }
-
-                                // attempt 2 — parse as XML
-                                // remove fmt param entirely so YouTube returns default XML
-                                try {
-                                    const xmlUrl = new URL(captionUrl)
-                                    xmlUrl.searchParams.delete("fmt")
-
-                                    const xmlRes = await fetch(xmlUrl.toString(), {
-                                        credentials: "include"
-                                    })
-                                    const xmlText = await xmlRes.text()
-
-                                    const parser = new DOMParser()
-                                    const doc = parser.parseFromString(xmlText, "text/xml")
-                                    const segments = doc.querySelectorAll("text")
-
-                                    if (segments.length > 0) {
-                                        const text = Array.from(segments)
-                                            .map(el => el.textContent
-                                                .replace(/&amp;/g, "&")
-                                                .replace(/&lt;/g, "<")
-                                                .replace(/&gt;/g, ">")
-                                                .replace(/&#39;/g, "'")
-                                                .replace(/&quot;/g, '"')
-                                                .trim()
-                                            )
-                                            .filter(Boolean)
-                                            .join(" ")
-                                            .replace(/\s+/g, " ")
-                                            .trim()
-
-                                        if (text && text.length > 50) {
-                                            return { transcript: text, format: "xml" }
-                                        }
-                                    }
-                                } catch (xmlErr) {
-                                    return {
-                                        error: "Both JSON and XML parsing failed: " + xmlErr.message
-                                    }
-                                }
-
-                                return { error: "Could not parse transcript in any format" }
-
-                            } catch (e) {
-                                return { error: e.message }
-                            }
-                        },
-                        args: [trackData.captionUrl]
-                    })
-
-                    const fetchData = fetchResult?.[0]?.result
-                    console.log("[MindVault] Fetch data:", fetchData)
-
-                    if (fetchData?.transcript) {
-                        transcriptResult = {
-                            transcript: fetchData.transcript,
-                            method: "movie_player_main_world",
-                            warning: ""
-                        }
+                if (result?.transcript) {
+                    transcriptResult = {
+                        transcript: result.transcript,
+                        method: `movie_player_${result.format}`,
+                        warning: ""
                     }
                 }
 
@@ -328,7 +308,7 @@ async function handleMessage(message) {
                 console.log("[MindVault] executeScript failed:", e.message)
             }
 
-            // ── STEP 3 — description fallback if extraction failed ──
+            // fallback — description only if transcript extraction failed
             if (!transcriptResult) {
                 try {
                     const descResult = await chrome.scripting.executeScript({
@@ -365,7 +345,7 @@ async function handleMessage(message) {
                 }
             }
 
-            // ── STEP 4 — give up if nothing worked ───────────────
+            // nothing worked
             if (!transcriptResult?.transcript) {
                 return {
                     ok: false,
@@ -374,7 +354,7 @@ async function handleMessage(message) {
                 }
             }
 
-            // ── STEP 5 — send to backend for summarization ────────
+            // send to backend for summarization
             return await apiCall("/api/notes/youtube-summarize", {
                 method: "POST",
                 body: JSON.stringify({
