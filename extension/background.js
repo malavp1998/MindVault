@@ -178,137 +178,115 @@ async function handleMessage(message) {
 
             let transcriptResult = null
 
-            // single MAIN world execution — get URL and fetch immediately
-            // no delay between getting URL and using it — never expires
             try {
-                const mainWorldResult = await chrome.scripting.executeScript({
+                const result = await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
-                    world: "MAIN",
+                    world: "ISOLATED",
                     func: async () => {
-                        try {
-                            const player = document.querySelector("#movie_player")
-                            if (!player?.getPlayerResponse) {
-                                return { error: "movie_player not found" }
+
+                        const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+                        // ── STEP 1 — check if transcript panel already open ──
+                        const getSegments = () => document.querySelectorAll(
+                            "ytd-transcript-segment-renderer .segment-text"
+                        )
+
+                        // ── STEP 2 — if not open, click ... menu to open it ──
+                        if (getSegments().length === 0) {
+
+                            // find the ... more actions button under video
+                            const menuBtn = document.querySelector(
+                                "#above-the-fold #button-shape button, " +
+                                "ytd-menu-renderer yt-icon-button button"
+                            )
+
+                            if (!menuBtn) {
+                                return { error: "Could not find menu button" }
                             }
 
-                            const tracks = player
-                                .getPlayerResponse()
-                                ?.captions
-                                ?.playerCaptionsTracklistRenderer
-                                ?.captionTracks
+                            menuBtn.click()
+                            await sleep(800)
 
-                            if (!tracks?.length) {
-                                return { error: "No caption tracks found" }
-                            }
+                            // find Show transcript in dropdown
+                            const menuItems = document.querySelectorAll(
+                                "ytd-menu-service-item-renderer, " +
+                                "tp-yt-paper-item"
+                            )
 
-                            // prefer english manual captions
-                            // then english auto-generated
-                            // then first available language
-                            const track =
-                                tracks.find(t => t.languageCode === "en" && !t.kind) ||
-                                tracks.find(t => t.languageCode === "en") ||
-                                tracks.find(t => t.languageCode?.startsWith("en")) ||
-                                tracks[0]
-
-                            console.log("[MindVault] Using track:", track.languageCode, track.name?.simpleText)
-
-                            // attempt 1 — JSON3 format
-                            try {
-                                const jsonUrl = new URL(track.baseUrl)
-                                jsonUrl.searchParams.set("fmt", "json3")
-
-                                const jsonRes = await fetch(jsonUrl.toString(), {
-                                    credentials: "include"
-                                })
-
-                                const rawText = await jsonRes.text()
-                                console.log("[MindVault] JSON3 response status:", jsonRes.status)
-                                console.log("[MindVault] JSON3 content-type:", jsonRes.headers.get("content-type"))
-
-                                const data = JSON.parse(rawText)
-                                const text = data.events
-                                    ?.filter(e => e.segs)
-                                    ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
-                                    ?.join(" ")
-                                    ?.replace(/\s+/g, " ")
-                                    ?.trim()
-
-                                if (text && text.length > 50) {
-                                    console.log("[MindVault] JSON3 success, length:", text.length)
-                                    return { transcript: text, format: "json3" }
+                            let transcriptBtn = null
+                            for (const item of menuItems) {
+                                if (item.innerText?.toLowerCase().includes("transcript")) {
+                                    transcriptBtn = item
+                                    break
                                 }
-                            } catch (jsonErr) {
-                                console.log("[MindVault] JSON3 failed:", jsonErr.message)
                             }
 
-                            // attempt 2 — XML format
-                            try {
-                                const xmlUrl = new URL(track.baseUrl)
-                                xmlUrl.searchParams.delete("fmt")
-
-                                const xmlRes = await fetch(xmlUrl.toString(), {
-                                    credentials: "include"
-                                })
-
-                                const xmlText = await xmlRes.text()
-                                console.log("[MindVault] XML response status:", xmlRes.status)
-                                console.log("[MindVault] XML content-type:", xmlRes.headers.get("content-type"))
-                                console.log("[MindVault] XML first 200 chars:", xmlText.slice(0, 200))
-
-                                const parser = new DOMParser()
-                                const doc = parser.parseFromString(xmlText, "text/xml")
-                                const segments = doc.querySelectorAll("text")
-
-                                if (segments.length > 0) {
-                                    const text = Array.from(segments)
-                                        .map(el => el.textContent
-                                            .replace(/&amp;/g, "&")
-                                            .replace(/&lt;/g, "<")
-                                            .replace(/&gt;/g, ">")
-                                            .replace(/&#39;/g, "'")
-                                            .replace(/&quot;/g, '"')
-                                            .trim()
-                                        )
-                                        .filter(Boolean)
-                                        .join(" ")
-                                        .replace(/\s+/g, " ")
-                                        .trim()
-
-                                    if (text && text.length > 50) {
-                                        console.log("[MindVault] XML success, length:", text.length)
-                                        return { transcript: text, format: "xml" }
-                                    }
+                            if (!transcriptBtn) {
+                                // close menu and return error
+                                document.dispatchEvent(
+                                    new KeyboardEvent("keydown", {
+                                        key: "Escape", bubbles: true
+                                    })
+                                )
+                                return {
+                                    error: "Show transcript option not found — " +
+                                        "video may not have captions"
                                 }
-
-                                console.log("[MindVault] XML had no text segments")
-                            } catch (xmlErr) {
-                                console.log("[MindVault] XML failed:", xmlErr.message)
                             }
 
-                            return { error: "Could not parse transcript in JSON3 or XML format" }
+                            transcriptBtn.click()
 
-                        } catch (e) {
-                            return { error: e.message }
+                            // wait for transcript panel to fully render
+                            // poll until segments appear — max 5 seconds
+                            let attempts = 0
+                            while (getSegments().length === 0 && attempts < 10) {
+                                await sleep(500)
+                                attempts++
+                            }
+                        }
+
+                        // ── STEP 3 — read segments from DOM ──────────────────
+                        const segments = getSegments()
+
+                        if (segments.length === 0) {
+                            return { error: "Transcript panel opened but no segments found" }
+                        }
+
+                        const text = Array.from(segments)
+                            .map(el => el.innerText?.trim())
+                            .filter(Boolean)
+                            .join(" ")
+                            .replace(/\s+/g, " ")
+                            .trim()
+
+                        if (!text || text.length < 50) {
+                            return { error: "Transcript text too short" }
+                        }
+
+                        return {
+                            transcript: text,
+                            segmentCount: segments.length,
+                            method: "dom_scrape"
                         }
                     }
                 })
 
-                const result = mainWorldResult?.[0]?.result
-                console.log("[MindVault] Main world result:", result)
+                const data = result?.[0]?.result
+                console.log("[MindVault] DOM scrape result:", data)
 
-                if (result?.transcript) {
+                if (data?.transcript) {
                     transcriptResult = {
-                        transcript: result.transcript,
-                        method: `movie_player_${result.format}`,
+                        transcript: data.transcript,
+                        method: data.method,
                         warning: ""
                     }
                 }
 
             } catch (e) {
-                console.log("[MindVault] executeScript failed:", e.message)
+                console.log("[MindVault] DOM scrape failed:", e.message)
             }
 
-            // fallback — description only if transcript extraction failed
+            // ── FALLBACK — description only ───────────────────────
             if (!transcriptResult) {
                 try {
                     const descResult = await chrome.scripting.executeScript({
@@ -318,14 +296,11 @@ async function handleMessage(message) {
                             const title = document.title
                                 ?.replace(" - YouTube", "")
                                 ?.trim() || ""
-
                             const descEl = document.querySelector(
                                 "#description-inline-expander yt-attributed-string, " +
-                                "#description-inline-expander, " +
-                                "#attributed-snippet-text"
+                                "#description-inline-expander"
                             )
                             const description = descEl?.innerText?.trim() || ""
-
                             return {
                                 transcript: `Video: ${title}\n\nDescription:\n${description}`.trim(),
                                 warning: "Full transcript unavailable — summarizing from description only"
@@ -345,7 +320,7 @@ async function handleMessage(message) {
                 }
             }
 
-            // nothing worked
+            // ── GIVE UP ───────────────────────────────────────────
             if (!transcriptResult?.transcript) {
                 return {
                     ok: false,
@@ -354,7 +329,7 @@ async function handleMessage(message) {
                 }
             }
 
-            // send to backend for summarization
+            // ── SEND TO BACKEND ───────────────────────────────────
             return await apiCall("/api/notes/youtube-summarize", {
                 method: "POST",
                 body: JSON.stringify({
