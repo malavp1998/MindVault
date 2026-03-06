@@ -98,6 +98,7 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
     Fetch all embeddings → UMAP + HDBSCAN cluster → upsert Topics → store 2D coords.
     Falls back to KMeans-style single-cluster assignment for vaults with < 5 notes.
     """
+    logger.info(f"[cluster_notes] Starting for user_id={user_id}")
     async with async_session() as db:
         try:
             query = select(Note).where(Note.embedding.isnot(None))
@@ -224,6 +225,10 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
                         {"ids": list(active_cluster_ids)},
                     )
 
+            logger.info(
+                f"[cluster_notes] Committing {len(unique_cluster_ids)} clusters "
+                f"({len(notes_db)} notes) for user_id={user_id}"
+            )
             await db.commit()
             logger.info("Clustering complete and committed.")
 
