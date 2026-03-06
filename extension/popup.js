@@ -12,7 +12,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function loadCurrentTab() {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
     currentTab = tabs[0]
-    isYoutube = currentTab?.url?.includes("youtube.com/watch")
+    const url = currentTab?.url || ""
+    isYoutube = url.includes("youtube.com/watch") || url.includes("youtube.com/shorts/")
 }
 
 async function checkAuthAndRoute() {
