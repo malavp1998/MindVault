@@ -234,35 +234,76 @@ async function handleMessage(message) {
                         world: "ISOLATED",
                         func: async (captionUrl) => {
                             try {
-                                // use URL API to properly set fmt
-                                // avoids duplicate fmt param issue
+                                // set fmt=json3 — YouTube may or may not honor it
                                 const url = new URL(captionUrl)
                                 url.searchParams.set("fmt", "json3")
 
                                 const res = await fetch(url.toString(), {
                                     credentials: "include"
                                 })
+                                if (!res.ok) return { error: `HTTP ${res.status}` }
 
-                                if (!res.ok) {
-                                    return { error: `Fetch failed: HTTP ${res.status}` }
+                                // read as text first — never assume JSON
+                                const rawText = await res.text()
+
+                                // attempt 1 — parse as JSON3
+                                try {
+                                    const data = JSON.parse(rawText)
+                                    const text = data.events
+                                        ?.filter(e => e.segs)
+                                        ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
+                                        ?.join(" ")
+                                        ?.replace(/\s+/g, " ")
+                                        ?.trim()
+
+                                    if (text && text.length > 50) {
+                                        return { transcript: text, format: "json3" }
+                                    }
+                                } catch (jsonErr) {
+                                    console.log("[MindVault] JSON parse failed, trying XML...")
                                 }
 
-                                const data = await res.json()
+                                // attempt 2 — parse as XML
+                                // remove fmt param entirely so YouTube returns default XML
+                                try {
+                                    const xmlUrl = new URL(captionUrl)
+                                    xmlUrl.searchParams.delete("fmt")
 
-                                const text = data.events
-                                    ?.filter(e => e.segs)
-                                    ?.map(e =>
-                                        e.segs.map(s => s.utf8 || "").join("")
-                                    )
-                                    ?.join(" ")
-                                    ?.replace(/\s+/g, " ")
-                                    ?.trim()
+                                    const xmlRes = await fetch(xmlUrl.toString(), {
+                                        credentials: "include"
+                                    })
+                                    const xmlText = await xmlRes.text()
 
-                                if (!text || text.length < 50) {
-                                    return { error: "Transcript too short or empty" }
+                                    const parser = new DOMParser()
+                                    const doc = parser.parseFromString(xmlText, "text/xml")
+                                    const segments = doc.querySelectorAll("text")
+
+                                    if (segments.length > 0) {
+                                        const text = Array.from(segments)
+                                            .map(el => el.textContent
+                                                .replace(/&amp;/g, "&")
+                                                .replace(/&lt;/g, "<")
+                                                .replace(/&gt;/g, ">")
+                                                .replace(/&#39;/g, "'")
+                                                .replace(/&quot;/g, '"')
+                                                .trim()
+                                            )
+                                            .filter(Boolean)
+                                            .join(" ")
+                                            .replace(/\s+/g, " ")
+                                            .trim()
+
+                                        if (text && text.length > 50) {
+                                            return { transcript: text, format: "xml" }
+                                        }
+                                    }
+                                } catch (xmlErr) {
+                                    return {
+                                        error: "Both JSON and XML parsing failed: " + xmlErr.message
+                                    }
                                 }
 
-                                return { transcript: text }
+                                return { error: "Could not parse transcript in any format" }
 
                             } catch (e) {
                                 return { error: e.message }
