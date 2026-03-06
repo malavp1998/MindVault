@@ -191,52 +191,45 @@ async function handleMessage(message) {
                             "ytd-transcript-segment-renderer .segment-text"
                         )
 
-                        // ── STEP 2 — if not open, click ... menu to open it ──
+                        // ── STEP 2 — open transcript panel ───────────────────
                         if (getSegments().length === 0) {
 
-                            // find the ... more actions button under video
-                            const menuBtn = document.querySelector(
-                                "#above-the-fold #button-shape button, " +
-                                "ytd-menu-renderer yt-icon-button button"
+                            // first expand the description "...more" section
+                            // Show transcript button lives here not in ... menu
+                            const showMoreBtn = document.querySelector(
+                                "tp-yt-paper-button#expand, " +
+                                "#description tp-yt-paper-button#expand, " +
+                                "ytd-text-inline-expander tp-yt-paper-button#expand"
                             )
 
-                            if (!menuBtn) {
-                                return { error: "Could not find menu button" }
+                            if (showMoreBtn) {
+                                showMoreBtn.click()
+                                await sleep(800)
                             }
 
-                            menuBtn.click()
-                            await sleep(800)
-
-                            // find Show transcript in dropdown
-                            const menuItems = document.querySelectorAll(
-                                "ytd-menu-service-item-renderer, " +
-                                "tp-yt-paper-item"
+                            // find Show transcript button in expanded description
+                            const allButtons = document.querySelectorAll(
+                                "button, tp-yt-paper-button, ytd-button-renderer"
                             )
 
                             let transcriptBtn = null
-                            for (const item of menuItems) {
-                                if (item.innerText?.toLowerCase().includes("transcript")) {
-                                    transcriptBtn = item
-                                    break
+                            for (const btn of allButtons) {
+                                if (btn.innerText?.toLowerCase().includes("transcript")) {
+                                    // prefer the BUTTON element not the renderer wrapper
+                                    transcriptBtn = btn
+                                    if (btn.tagName === "BUTTON") break
                                 }
                             }
 
                             if (!transcriptBtn) {
-                                // close menu and return error
-                                document.dispatchEvent(
-                                    new KeyboardEvent("keydown", {
-                                        key: "Escape", bubbles: true
-                                    })
-                                )
                                 return {
-                                    error: "Show transcript option not found — " +
+                                    error: "Show transcript button not found — " +
                                         "video may not have captions"
                                 }
                             }
 
                             transcriptBtn.click()
 
-                            // wait for transcript panel to fully render
                             // poll until segments appear — max 5 seconds
                             let attempts = 0
                             while (getSegments().length === 0 && attempts < 10) {
