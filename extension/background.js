@@ -172,163 +172,177 @@ async function handleMessage(message) {
             return await getRelatedNotes(message.url, message.content)
 
         case "SUMMARIZE_YOUTUBE": {
-            // Step 1 — Extract transcript client-side
-            let transcript = null
-            let warning = null
-            let method = null
+            const [tab] = await chrome.tabs.query({
+                active: true, currentWindow: true
+            })
 
+            let transcriptResult = null
+
+            // ── STEP 1 — get caption URL from MAIN world ──────
+            // executeScript with world:MAIN has access to
+            // #movie_player.getPlayerResponse() unlike content scripts
             try {
-                const [tab] = await chrome.tabs.query({
-                    active: true, currentWindow: true
+                const mainWorldResult = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    world: "MAIN",
+                    func: () => {
+                        // small retry loop for SPA navigation timing
+                        // captions may not be ready immediately
+                        const getTrack = () => {
+                            const player = document.querySelector("#movie_player")
+                            if (!player?.getPlayerResponse) return null
+
+                            const tracks = player
+                                .getPlayerResponse()
+                                ?.captions
+                                ?.playerCaptionsTracklistRenderer
+                                ?.captionTracks
+
+                            if (!tracks?.length) return null
+
+                            // prefer english manual captions
+                            // then english auto-generated
+                            // then first available language
+                            return (
+                                tracks.find(t => t.languageCode === "en" && !t.kind) ||
+                                tracks.find(t => t.languageCode === "en") ||
+                                tracks.find(t => t.languageCode?.startsWith("en")) ||
+                                tracks[0]
+                            )
+                        }
+
+                        const track = getTrack()
+                        if (!track) return null
+
+                        return {
+                            captionUrl: track.baseUrl,
+                            languageCode: track.languageCode,
+                            trackName: track.name?.simpleText || ""
+                        }
+                    }
                 })
 
-                // First try executing in MAIN world to access window.ytInitialPlayerResponse
-                try {
-                    const results = await chrome.scripting.executeScript({
+                const trackData = mainWorldResult?.[0]?.result
+                console.log("[MindVault] Track data:", trackData)
+
+                if (trackData?.captionUrl) {
+
+                    // ── STEP 2 — fetch transcript using caption URL ──
+                    // fetch runs in ISOLATED world so cookies auto included
+                    const fetchResult = await chrome.scripting.executeScript({
                         target: { tabId: tab.id },
-                        world: "MAIN",
-                        func: async () => {
-                            const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+                        world: "ISOLATED",
+                        func: async (captionUrl) => {
+                            try {
+                                // use URL API to properly set fmt
+                                // avoids duplicate fmt param issue
+                                const url = new URL(captionUrl)
+                                url.searchParams.set("fmt", "json3")
 
-                            const extractTextFromJson3 = (data) => {
-                                const text = (data?.events || [])
-                                    .filter(e => e?.segs?.length)
-                                    .map(e => e.segs.map(s => s?.utf8 || "").join(""))
-                                    .join(" ")
-                                    .replace(/\s+/g, " ")
-                                    .trim()
-                                return text || null
-                            }
+                                const res = await fetch(url.toString(), {
+                                    credentials: "include"
+                                })
 
-                            const chooseTrack = (tracks) => {
-                                return (
-                                    tracks.find(t => (t.languageCode === "en" || t.languageCode?.startsWith("en")) && !t.kind) ||
-                                    tracks.find(t => (t.languageCode === "en" || t.languageCode?.startsWith("en"))) ||
-                                    tracks.find(t => !t.kind) ||
-                                    tracks[0]
-                                )
-                            }
-
-                            const decodeBaseUrl = (track) => {
-                                if (track?.baseUrl) return track.baseUrl
-                                const cipher = track?.signatureCipher || track?.cipher
-                                if (!cipher) return null
-                                try {
-                                    const p = new URLSearchParams(cipher)
-                                    const url = p.get("url")
-                                    return url ? decodeURIComponent(url) : null
-                                } catch {
-                                    return null
+                                if (!res.ok) {
+                                    return { error: `Fetch failed: HTTP ${res.status}` }
                                 }
+
+                                const data = await res.json()
+
+                                const text = data.events
+                                    ?.filter(e => e.segs)
+                                    ?.map(e =>
+                                        e.segs.map(s => s.utf8 || "").join("")
+                                    )
+                                    ?.join(" ")
+                                    ?.replace(/\s+/g, " ")
+                                    ?.trim()
+
+                                if (!text || text.length < 50) {
+                                    return { error: "Transcript too short or empty" }
+                                }
+
+                                return { transcript: text }
+
+                            } catch (e) {
+                                return { error: e.message }
                             }
+                        },
+                        args: [trackData.captionUrl]
+                    })
 
-                            const fetchTranscriptForTrack = async (track) => {
-                                const baseUrl = decodeBaseUrl(track)
-                                if (!baseUrl) return null
+                    const fetchData = fetchResult?.[0]?.result
+                    console.log("[MindVault] Fetch data:", fetchData)
 
-                                // Force JSON3 by overriding fmt (not appending).
-                                try {
-                                    const u = new URL(baseUrl, window.location.origin)
-                                    u.searchParams.set("fmt", "json3")
-                                    const res = await fetch(u.toString(), { credentials: "include" })
-                                    const ct = (res.headers.get("content-type") || "").toLowerCase()
-                                    if (res.ok && (ct.includes("json") || ct.includes("javascript") || ct.includes("text/plain"))) {
-                                        const data = await res.json().catch(() => null)
-                                        const text = extractTextFromJson3(data)
-                                        if (text) return { transcript: text, method: "main_world_caption_tracks_json3" }
-                                    }
-                                } catch { }
-
-                                // XML fallback
-                                try {
-                                    const resXml = await fetch(baseUrl, { credentials: "include" })
-                                    if (!resXml.ok) return null
-                                    const xml = await resXml.text()
-                                    const doc = new DOMParser().parseFromString(xml, "text/xml")
-                                    const text = Array.from(doc.querySelectorAll("text"))
-                                        .map(el => (el.textContent || "")
-                                            .replace(/&amp;/g, "&")
-                                            .replace(/&lt;/g, "<")
-                                            .replace(/&gt;/g, ">")
-                                            .replace(/&#39;/g, "'")
-                                            .replace(/&quot;/g, '"')
-                                        )
-                                        .join(" ")
-                                        .replace(/\s+/g, " ")
-                                        .trim()
-                                    if (text) return { transcript: text, method: "main_world_caption_tracks_xml" }
-                                } catch { }
-
-                                return null
-                            }
-
-                            // Captions are sometimes not in the first player response; retry briefly.
-                            for (let attempt = 0; attempt < 6; attempt++) {
-                                try {
-                                    const pr =
-                                        window.ytInitialPlayerResponse ||
-                                        document.querySelector("#movie_player")?.getPlayerResponse?.() ||
-                                        null
-                                    const tracks = pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks
-                                    if (tracks && tracks.length) {
-                                        const track = chooseTrack(tracks)
-                                        const result = await fetchTranscriptForTrack(track)
-                                        if (result?.transcript && result.transcript.length > 50) return result
-                                    }
-                                } catch { }
-                                await sleep(350)
-                            }
-
-                            return null
+                    if (fetchData?.transcript) {
+                        transcriptResult = {
+                            transcript: fetchData.transcript,
+                            method: "movie_player_main_world",
+                            warning: ""
                         }
-                    })
-
-                    if (results && results[0]?.result?.transcript) {
-                        transcript = results[0].result.transcript
-                        method = results[0].result.method
-                    }
-                } catch (e) {
-                    console.log("[MindVault] MAIN world extraction failed:", e)
-                }
-
-                // If MAIN world failed, fallback to content script (ISOLATED world)
-                if (!transcript) {
-                    const contentScriptResult = await new Promise((resolve) => {
-                        chrome.tabs.sendMessage(
-                            tab.id,
-                            { type: "GET_YOUTUBE_TRANSCRIPT" },
-                            resolve
-                        )
-                    })
-
-                    if (contentScriptResult && contentScriptResult.transcript) {
-                        transcript = contentScriptResult.transcript
-                        method = contentScriptResult.method
-                        warning = contentScriptResult.warning
                     }
                 }
 
             } catch (e) {
-                console.error("[MindVault] Transcript extraction failed:", e)
+                console.log("[MindVault] executeScript failed:", e.message)
             }
 
-            if (!transcript) {
-                return {
-                    ok: false,
-                    error: "Could not extract transcript from this video. The video may not have captions available."
+            // ── STEP 3 — description fallback if extraction failed ──
+            if (!transcriptResult) {
+                try {
+                    const descResult = await chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        world: "ISOLATED",
+                        func: () => {
+                            const title = document.title
+                                ?.replace(" - YouTube", "")
+                                ?.trim() || ""
+
+                            const descEl = document.querySelector(
+                                "#description-inline-expander yt-attributed-string, " +
+                                "#description-inline-expander, " +
+                                "#attributed-snippet-text"
+                            )
+                            const description = descEl?.innerText?.trim() || ""
+
+                            return {
+                                transcript: `Video: ${title}\n\nDescription:\n${description}`.trim(),
+                                warning: "Full transcript unavailable — summarizing from description only"
+                            }
+                        }
+                    })
+
+                    const descData = descResult?.[0]?.result
+                    if (descData?.transcript) {
+                        transcriptResult = {
+                            ...descData,
+                            method: "description_fallback"
+                        }
+                    }
+                } catch (e) {
+                    console.log("[MindVault] Description fallback failed:", e.message)
                 }
             }
 
-            // Step 2 — Send transcript to backend for summarization only
+            // ── STEP 4 — give up if nothing worked ───────────────
+            if (!transcriptResult?.transcript) {
+                return {
+                    ok: false,
+                    error: "Could not extract transcript. " +
+                        "Please make sure the video has captions enabled."
+                }
+            }
+
+            // ── STEP 5 — send to backend for summarization ────────
             return await apiCall("/api/notes/youtube-summarize", {
                 method: "POST",
                 body: JSON.stringify({
-                    transcript: transcript,
+                    transcript: transcriptResult.transcript,
                     video_url: message.videoUrl,
-                    video_title: message.videoTitle || "YouTube Video",
+                    video_title: message.videoTitle,
                     annotation: message.annotation || "",
-                    extraction_method: method || "unknown",
-                    warning: warning || ""
+                    extraction_method: transcriptResult.method,
+                    warning: transcriptResult.warning || ""
                 })
             })
         }
