@@ -82,7 +82,7 @@ async def get_graph_data(
                     LIMIT :k
                 """),
                 {
-                    "emb": str(note.embedding),
+                    "emb": "[" + ",".join(str(x) for x in note.embedding) + "]",
                     "uid": str(current_user.id),
                     "nid": str(note.id),
                     "k": max_semantic_per_note,
