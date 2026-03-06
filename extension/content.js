@@ -34,7 +34,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ── YouTube Transcript Extraction ─────────────────────────────
 
 async function extractYoutubeTranscript() {
-  const videoId = new URLSearchParams(window.location.search).get("v")
+  const videoId = getYouTubeVideoIdFromLocation()
   if (!videoId) {
     return { transcript: null, error: "No video ID found in URL" }
   }
@@ -43,22 +43,16 @@ async function extractYoutubeTranscript() {
   try {
     let playerResponse = null
 
-    // try window global first (MAIN world injection may have set it)
-    if (window.ytInitialPlayerResponse) {
-      playerResponse = window.ytInitialPlayerResponse
-    } else {
-      // search all scripts on page
-      const scripts = Array.from(document.querySelectorAll("script"))
-      for (const script of scripts) {
-        const text = script.textContent || ""
-        if (text.includes("captionTracks")) {
-          const match = text.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;/)
-          if (match) {
-            try { playerResponse = JSON.parse(match[1]) } catch { }
-            break
-          }
-        }
-      }
+    // Prefer the live player response (works well on SPA navigations)
+    try {
+      playerResponse =
+        document.querySelector("#movie_player")?.getPlayerResponse?.() ||
+        null
+    } catch { }
+
+    // If that fails, parse inline scripts for ytInitialPlayerResponse assignment
+    if (!playerResponse) {
+      playerResponse = extractInitialPlayerResponseFromScripts()
     }
 
     if (playerResponse) {
@@ -68,51 +62,10 @@ async function extractYoutubeTranscript() {
         ?.captionTracks
 
       if (tracks && tracks.length > 0) {
-        // prefer english manual captions, then english auto, then any
-        const track =
-          tracks.find(t => t.languageCode === "en" && !t.kind) ||
-          tracks.find(t => t.languageCode === "en") ||
-          tracks.find(t => t.languageCode?.startsWith("en")) ||
-          tracks[0]
-
-        const captionUrl = track.baseUrl
-
-        // fetch as JSON3 first
-        const res = await fetch(captionUrl + "&fmt=json3")
-        if (res.ok) {
-          const data = await res.json()
-          const text = data.events
-            ?.filter(e => e.segs)
-            ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
-            ?.join(" ")
-            ?.replace(/\s+/g, " ")
-            ?.trim()
-
-          if (text && text.length > 100) {
-            return { transcript: text, method: "caption_tracks_json3" }
-          }
-        }
-
-        // fallback to XML format
-        const resXml = await fetch(captionUrl)
-        if (resXml.ok) {
-          const xml = await resXml.text()
-          const parser = new DOMParser()
-          const doc = parser.parseFromString(xml, "text/xml")
-          const text = Array.from(doc.querySelectorAll("text"))
-            .map(el => el.textContent
-              .replace(/&amp;/g, "&")
-              .replace(/&lt;/g, "<")
-              .replace(/&gt;/g, ">")
-              .replace(/&#39;/g, "'")
-              .replace(/&quot;/g, '"')
-            )
-            .join(" ")
-            .trim()
-
-          if (text && text.length > 100) {
-            return { transcript: text, method: "caption_tracks_xml" }
-          }
+        const track = chooseCaptionTrack(tracks)
+        const transcript = await fetchTranscriptFromCaptionTrack(track)
+        if (transcript && transcript.length > 100) {
+          return { transcript, method: "caption_tracks" }
         }
       }
     }
@@ -130,15 +83,10 @@ async function extractYoutubeTranscript() {
 
     for (const url of urls) {
       try {
-        const res = await fetch(url)
+        const res = await fetch(url, { credentials: "include" })
         if (!res.ok) continue
-        const data = await res.json()
-        const text = data.events
-          ?.filter(e => e.segs)
-          ?.map(e => e.segs.map(s => s.utf8 || "").join(""))
-          ?.join(" ")
-          ?.replace(/\s+/g, " ")
-          ?.trim()
+        const data = await res.json().catch(() => null)
+        const text = extractTranscriptTextFromJson3(data)
 
         if (text && text.length > 100) {
           return { transcript: text, method: "timedtext_direct" }
@@ -170,4 +118,157 @@ async function extractYoutubeTranscript() {
     transcript: null,
     error: "No transcript or description found for this video"
   }
+}
+
+function getYouTubeVideoIdFromLocation() {
+  try {
+    const url = new URL(window.location.href)
+    const v = url.searchParams.get("v")
+    if (v) return v
+
+    // shorts: /shorts/<id>
+    const parts = url.pathname.split("/").filter(Boolean)
+    if (parts[0] === "shorts" && parts[1]) return parts[1]
+
+    // youtu.be/<id> (in case content script ever runs there)
+    if (url.hostname === "youtu.be" && parts[0]) return parts[0]
+  } catch { }
+  return null
+}
+
+function chooseCaptionTrack(tracks) {
+  // Prefer English manual captions → English auto → any manual → anything.
+  return (
+    tracks.find(t => (t.languageCode === "en" || t.languageCode?.startsWith("en")) && !t.kind) ||
+    tracks.find(t => (t.languageCode === "en" || t.languageCode?.startsWith("en"))) ||
+    tracks.find(t => !t.kind) ||
+    tracks[0]
+  )
+}
+
+function extractTranscriptTextFromJson3(data) {
+  const text = data?.events
+    ?.filter(e => e?.segs?.length)
+    ?.map(e => e.segs.map(s => s?.utf8 || "").join(""))
+    ?.join(" ")
+    ?.replace(/\s+/g, " ")
+    ?.trim()
+  return text || null
+}
+
+function decodeCaptionBaseUrl(track) {
+  if (track?.baseUrl) return track.baseUrl
+  const cipher = track?.signatureCipher || track?.cipher
+  if (!cipher) return null
+  try {
+    const params = new URLSearchParams(cipher)
+    // Some ciphers use `url=...`, some also include `s` for signature (not handled here).
+    const url = params.get("url")
+    return url ? decodeURIComponent(url) : null
+  } catch {
+    return null
+  }
+}
+
+async function fetchTranscriptFromCaptionTrack(track) {
+  const baseUrl = decodeCaptionBaseUrl(track)
+  if (!baseUrl) return null
+
+  // Force JSON3 (do not append; override existing fmt if present).
+  try {
+    const u = new URL(baseUrl, window.location.origin)
+    u.searchParams.set("fmt", "json3")
+    const res = await fetch(u.toString(), { credentials: "include" })
+    const ct = (res.headers.get("content-type") || "").toLowerCase()
+    if (res.ok && (ct.includes("json") || ct.includes("javascript") || ct.includes("text/plain"))) {
+      const data = await res.json().catch(() => null)
+      const text = extractTranscriptTextFromJson3(data)
+      if (text) return text
+    }
+  } catch { }
+
+  // XML fallback
+  try {
+    const resXml = await fetch(baseUrl, { credentials: "include" })
+    if (!resXml.ok) return null
+    const xml = await resXml.text()
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(xml, "text/xml")
+    const text = Array.from(doc.querySelectorAll("text"))
+      .map(el => (el.textContent || "")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&#39;/g, "'")
+        .replace(/&quot;/g, '"')
+      )
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+    return text || null
+  } catch {
+    return null
+  }
+}
+
+function extractInitialPlayerResponseFromScripts() {
+  const scripts = Array.from(document.querySelectorAll("script"))
+  for (const script of scripts) {
+    const text = script.textContent || ""
+    if (!text.includes("ytInitialPlayerResponse")) continue
+
+    const json = extractJsonObjectAfterAssignment(text, "ytInitialPlayerResponse")
+    if (!json) continue
+
+    try {
+      return JSON.parse(json)
+    } catch { }
+  }
+  return null
+}
+
+function extractJsonObjectAfterAssignment(source, varName) {
+  // Handles: `var ytInitialPlayerResponse = {...};` across many lines.
+  const idx = source.indexOf(varName)
+  if (idx === -1) return null
+  const eq = source.indexOf("=", idx)
+  if (eq === -1) return null
+  const start = source.indexOf("{", eq)
+  if (start === -1) return null
+
+  let depth = 0
+  let inStr = null // "'" | '"'
+  let esc = false
+
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i]
+
+    if (inStr) {
+      if (esc) {
+        esc = false
+        continue
+      }
+      if (ch === "\\") {
+        esc = true
+        continue
+      }
+      if (ch === inStr) {
+        inStr = null
+      }
+      continue
+    }
+
+    if (ch === "\"" || ch === "'") {
+      inStr = ch
+      continue
+    }
+
+    if (ch === "{") depth++
+    if (ch === "}") {
+      depth--
+      if (depth === 0) return source.slice(start, i + 1)
+    }
+  }
+
+  return null
 }

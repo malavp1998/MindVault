@@ -188,29 +188,98 @@ async function handleMessage(message) {
                         target: { tabId: tab.id },
                         world: "MAIN",
                         func: async () => {
-                            try {
-                                const pr = window.ytInitialPlayerResponse ||
-                                    document.querySelector("#movie_player")?.getPlayerResponse?.()
-                                const tracks = pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks
-                                if (!tracks || tracks.length === 0) return null
+                            const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-                                const track = tracks.find(t => t.kind !== "asr") || tracks[0]
-                                const url = track.baseUrl + (track.baseUrl.includes("?") ? "&" : "?") + "fmt=json3"
+                            const extractTextFromJson3 = (data) => {
+                                const text = (data?.events || [])
+                                    .filter(e => e?.segs?.length)
+                                    .map(e => e.segs.map(s => s?.utf8 || "").join(""))
+                                    .join(" ")
+                                    .replace(/\s+/g, " ")
+                                    .trim()
+                                return text || null
+                            }
 
-                                const res = await fetch(url)
-                                const data = await res.json()
-                                return {
-                                    transcript: (data.events || [])
-                                        .filter(e => e.segs)
-                                        .map(e => e.segs.map(s => s.utf8).join(""))
-                                        .join(" ")
-                                        .replace(/\n/g, " ")
-                                        .trim(),
-                                    method: "main_world_player_response"
+                            const chooseTrack = (tracks) => {
+                                return (
+                                    tracks.find(t => (t.languageCode === "en" || t.languageCode?.startsWith("en")) && !t.kind) ||
+                                    tracks.find(t => (t.languageCode === "en" || t.languageCode?.startsWith("en"))) ||
+                                    tracks.find(t => !t.kind) ||
+                                    tracks[0]
+                                )
+                            }
+
+                            const decodeBaseUrl = (track) => {
+                                if (track?.baseUrl) return track.baseUrl
+                                const cipher = track?.signatureCipher || track?.cipher
+                                if (!cipher) return null
+                                try {
+                                    const p = new URLSearchParams(cipher)
+                                    const url = p.get("url")
+                                    return url ? decodeURIComponent(url) : null
+                                } catch {
+                                    return null
                                 }
-                            } catch {
+                            }
+
+                            const fetchTranscriptForTrack = async (track) => {
+                                const baseUrl = decodeBaseUrl(track)
+                                if (!baseUrl) return null
+
+                                // Force JSON3 by overriding fmt (not appending).
+                                try {
+                                    const u = new URL(baseUrl, window.location.origin)
+                                    u.searchParams.set("fmt", "json3")
+                                    const res = await fetch(u.toString(), { credentials: "include" })
+                                    const ct = (res.headers.get("content-type") || "").toLowerCase()
+                                    if (res.ok && (ct.includes("json") || ct.includes("javascript") || ct.includes("text/plain"))) {
+                                        const data = await res.json().catch(() => null)
+                                        const text = extractTextFromJson3(data)
+                                        if (text) return { transcript: text, method: "main_world_caption_tracks_json3" }
+                                    }
+                                } catch { }
+
+                                // XML fallback
+                                try {
+                                    const resXml = await fetch(baseUrl, { credentials: "include" })
+                                    if (!resXml.ok) return null
+                                    const xml = await resXml.text()
+                                    const doc = new DOMParser().parseFromString(xml, "text/xml")
+                                    const text = Array.from(doc.querySelectorAll("text"))
+                                        .map(el => (el.textContent || "")
+                                            .replace(/&amp;/g, "&")
+                                            .replace(/&lt;/g, "<")
+                                            .replace(/&gt;/g, ">")
+                                            .replace(/&#39;/g, "'")
+                                            .replace(/&quot;/g, '"')
+                                        )
+                                        .join(" ")
+                                        .replace(/\s+/g, " ")
+                                        .trim()
+                                    if (text) return { transcript: text, method: "main_world_caption_tracks_xml" }
+                                } catch { }
+
                                 return null
                             }
+
+                            // Captions are sometimes not in the first player response; retry briefly.
+                            for (let attempt = 0; attempt < 6; attempt++) {
+                                try {
+                                    const pr =
+                                        window.ytInitialPlayerResponse ||
+                                        document.querySelector("#movie_player")?.getPlayerResponse?.() ||
+                                        null
+                                    const tracks = pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks
+                                    if (tracks && tracks.length) {
+                                        const track = chooseTrack(tracks)
+                                        const result = await fetchTranscriptForTrack(track)
+                                        if (result?.transcript && result.transcript.length > 50) return result
+                                    }
+                                } catch { }
+                                await sleep(350)
+                            }
+
+                            return null
                         }
                     })
 
