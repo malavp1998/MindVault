@@ -54,7 +54,7 @@ export default function RevisionPage() {
 
     const fetchQueue = async () => {
         try {
-            const res = await api.get('/api/revision/queue');
+            const res = await api.get('/revision/queue');
             const data = res.data;
             if (data.notes && data.notes.length > 0) {
                 setNotes(data.notes);
@@ -76,7 +76,7 @@ export default function RevisionPage() {
             setRatings(prev => [...prev, rating]);
             setCounts(prev => ({ ...prev, [rating]: prev[rating] + 1 }));
 
-            const res = await api.post('/api/revision/rate', {
+            const res = await api.post('/revision/rate', {
                 note_id: noteId,
                 session_id: sessionId,
                 rating: rating,
@@ -98,7 +98,7 @@ export default function RevisionPage() {
 
     const handleSkip = async (noteId) => {
         try {
-            await api.post('/api/revision/skip', {
+            await api.post('/revision/skip', {
                 note_id: noteId,
                 session_id: sessionId,
             });
@@ -120,7 +120,7 @@ export default function RevisionPage() {
     const handleSessionComplete = async () => {
         try {
             if (sessionId) {
-                const res = await api.post('/api/revision/session/complete', {
+                const res = await api.post('/revision/session/complete', {
                     session_id: sessionId
                 });
                 if (res.data.current_streak !== undefined) {

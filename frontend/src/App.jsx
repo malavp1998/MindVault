@@ -20,7 +20,7 @@ function Sidebar() {
 
     useEffect(() => {
         if (!user) return;
-        api.get("/api/revision/stats")
+        api.get("/revision/stats")
             .then(res => setDueCount(res.data.notes_due_today))
             .catch(() => { });
     }, [user]);
