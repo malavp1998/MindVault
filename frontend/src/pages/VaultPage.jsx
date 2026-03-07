@@ -171,20 +171,36 @@ export default function VaultPage() {
                     onClick={() => setIsCreatingNote(!isCreatingNote)}
                     style={{
                         marginLeft: 'auto',
-                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'var(--accent-color)',
+                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
                         color: isCreatingNote ? '#ef4444' : '#fff',
                         border: 'none',
-                        padding: '8px 16px',
-                        borderRadius: 8,
+                        padding: '10px 18px',
+                        borderRadius: 10,
                         fontWeight: 600,
+                        fontSize: 14,
+                        boxShadow: isCreatingNote ? 'none' : '0 4px 12px rgba(139, 92, 246, 0.25)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8,
                         transition: 'all 0.2s ease'
                     }}
+                    onMouseOver={(e) => {
+                        if (!isCreatingNote) {
+                            e.currentTarget.style.opacity = '0.9';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.35)';
+                        }
+                    }}
+                    onMouseOut={(e) => {
+                        if (!isCreatingNote) {
+                            e.currentTarget.style.opacity = '1';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.25)';
+                        }
+                    }}
                 >
-                    {isCreatingNote ? "✕ Cancel" : "➕ Create Note"}
+                    {isCreatingNote ? "✕ Cancel" : "✨ Create New Note"}
                 </button>
             </div>
 
