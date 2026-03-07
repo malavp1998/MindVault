@@ -102,6 +102,8 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
     Falls back to KMeans-style single-cluster assignment for vaults with < 5 notes.
     """
     logger.info(f"[cluster_notes] Starting for user_id={user_id}")
+    
+    # --- Phase 1: Fetch data (Session 1) ---
     async with async_session() as db:
         try:
             query = select(Note).where(Note.embedding.isnot(None))
@@ -118,52 +120,75 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
             note_ids = [n.id for n in notes_db]
             contents = [(n.content or "")[:300] for n in notes_db]
             X = np.array(embeddings)
+        except Exception as e:
+            logger.error(f"Failed to fetch notes for clustering: {e}")
+            return
 
-            if len(notes_db) < 5:
-                # Tiny vault: assign all to cluster 0, skip UMAP
-                labels = [0] * len(notes_db)
-                probabilities = [1.0] * len(notes_db)
-                coords_2d = np.random.randn(len(notes_db), 2) * 100
-            else:
-                try:
-                    labels, probabilities, coords_2d = await asyncio.wait_for(
-                        asyncio.get_running_loop().run_in_executor(
-                            clustering_executor, _run_umap_hdbscan, X
-                        ),
-                        timeout=300.0,
-                    )
-                except asyncio.TimeoutError:
-                    logger.error("UMAP/HDBSCAN timed out after 300s — skipping clustering run")
-                    return
-
-            logger.info(
-                f"HDBSCAN: {len(notes_db)} notes → "
-                f"{len(set(l for l in labels if l >= 0))} clusters, "
-                f"{sum(1 for l in labels if l == -1)} outliers"
+    # --- Phase 2: Heavy Computation (Outside DB Session) ---
+    logger.info(f"Loaded {len(notes_db)} notes. DB connection released. Starting computation.")
+    if len(notes_db) < 5:
+        # Tiny vault: assign all to cluster 0, skip UMAP
+        labels = [0] * len(notes_db)
+        probabilities = [1.0] * len(notes_db)
+        coords_2d = np.random.randn(len(notes_db), 2) * 100
+    else:
+        try:
+            labels, probabilities, coords_2d = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(
+                    clustering_executor, _run_umap_hdbscan, X
+                ),
+                timeout=300.0,
             )
+        except asyncio.TimeoutError:
+            logger.error("UMAP/HDBSCAN timed out after 300s — skipping clustering run")
+            return
 
-            # ── Store 2D coordinates on each note ──────────────────────
-            for i, note in enumerate(notes_db):
-                note.graph_x = float(coords_2d[i, 0])
-                note.graph_y = float(coords_2d[i, 1])
+    logger.info(
+        f"HDBSCAN: {len(notes_db)} notes → "
+        f"{len(set(l for l in labels if l >= 0))} clusters, "
+        f"{sum(1 for l in labels if l == -1)} outliers"
+    )
+
+    unique_cluster_ids = sorted(set(l for l in labels if l >= 0))
+    cluster_topics = {}
+
+    for cluster_id in unique_cluster_ids:
+        cluster_indices = [i for i, l in enumerate(labels) if l == cluster_id]
+        cluster_contents = [contents[i] for i in cluster_indices]
+
+        try:
+            topic_name = await asyncio.wait_for(
+                _generate_topic_name(cluster_contents),
+                timeout=15.0,
+            )
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Topic naming failed ({e}), using fallback name")
+            topic_name = "General Notes"
+        cluster_topics[cluster_id] = topic_name.strip()[:100]
+
+    # --- Phase 3: Write Results (Session 2) ---
+    logger.info("Computations complete. Re-opening DB connection to save results.")
+    async with async_session() as db:
+        try:
+            await db.rollback() # Ensure cleanliness
+            
+            # Re-fetch notes to update them
+            result = await db.execute(select(Note).where(Note.id.in_(note_ids)))
+            raw_notes = result.scalars().all()
+            notes_by_id = {n.id: n for n in raw_notes}
+
+            # ── Store 2D coordinates on each note ──
+            for i, nid in enumerate(note_ids):
+                note = notes_by_id.get(nid)
+                if note:
+                    note.graph_x = float(coords_2d[i, 0])
+                    note.graph_y = float(coords_2d[i, 1])
 
             # ── Upsert Topics per cluster ───────────────────────────────
-            unique_cluster_ids = sorted(set(l for l in labels if l >= 0))
-
             for cluster_id in unique_cluster_ids:
                 cluster_indices = [i for i, l in enumerate(labels) if l == cluster_id]
                 cluster_note_ids = [note_ids[i] for i in cluster_indices]
-                cluster_contents = [contents[i] for i in cluster_indices]
-
-                try:
-                    topic_name = await asyncio.wait_for(
-                        _generate_topic_name(cluster_contents),
-                        timeout=15.0,
-                    )
-                except (asyncio.TimeoutError, Exception) as e:
-                    logger.warning(f"Topic naming failed ({e}), using fallback name")
-                    topic_name = "General Notes"
-                topic_name = topic_name.strip()[:100]
+                topic_name = cluster_topics[cluster_id]
 
                 # Upsert Topic
                 existing_res = await db.execute(
