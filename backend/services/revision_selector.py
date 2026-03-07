@@ -35,7 +35,6 @@ async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
     """), {"uid": str(user_id)})
     
     rows = result.mappings().all()
-    print(f"[REVISION DEBUG] DB returned {len(rows)} potential notes for user {user_id}")
 
     if not rows:
         return []
@@ -63,7 +62,6 @@ async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
             
             # Convert both to naive UTC dates to avoid IST/UTC offset issues
             if next_dt.replace(tzinfo=None).date() > now.date():
-                print(f"[REVISION DEBUG] Skipping note {note['id']} because next_review_date {next_dt.date()} is > today {now.date()}")
                 continue
 
         memory_state = {
@@ -78,7 +76,6 @@ async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
         )
         note["priority_score"] = score
         notes_with_scores.append(note)
-        print(f"[REVISION DEBUG] Note {note['id']} added to selection pool with score {score}")
 
     notes_with_scores.sort(key=lambda x: x["priority_score"], reverse=True)
 
@@ -101,7 +98,6 @@ async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
             if len(selected) >= REVISION_THRESHOLD:
                 break
 
-    print(f"[REVISION DEBUG] Final selected queue length: {len(selected[:REVISION_THRESHOLD])}")
     return selected[:REVISION_THRESHOLD]
 
 
