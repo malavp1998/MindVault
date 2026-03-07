@@ -35,7 +35,8 @@ function showScreen(name) {
 
 function showMain(user) {
     showScreen("main")
-    document.getElementById("header-username").textContent = `@${user.username}`
+    document.getElementById("header-username").textContent =
+        user.username ? `@${user.username}` : (user.email || "")
 
     // populate page info
     if (currentTab) {
@@ -66,9 +67,36 @@ function showMain(user) {
 
 // ── EVENT LISTENERS ───────────────────────────────────
 function setupLoginListeners() {
-    document.getElementById("btn-login").addEventListener("click", handleLogin)
-    document.getElementById("login-password")
-        .addEventListener("keydown", e => { if (e.key === "Enter") handleLogin() })
+    // Open web app in new tab (use chrome.tabs.create, NOT an anchor href)
+    const btnOpen = document.getElementById("btn-open-webapp")
+    if (btnOpen) {
+        btnOpen.addEventListener("click", () => {
+            chrome.tabs.create({ url: "https://mind-vault-ecru.vercel.app/login" })
+        })
+    }
+
+    // Re-check auth after user has signed in on web app
+    const btnCheck = document.getElementById("btn-check-login")
+    if (btnCheck) {
+        btnCheck.addEventListener("click", async () => {
+            btnCheck.textContent = "Checking..."
+            btnCheck.disabled = true
+
+            const errorEl = document.getElementById("login-error")
+            errorEl.classList.add("hidden")
+
+            const result = await sendMessage({ type: "CHECK_AUTH" })
+
+            if (result?.authenticated) {
+                showMain(result.user)
+            } else {
+                errorEl.textContent = "Not signed in yet. Please sign in on the web app first."
+                errorEl.classList.remove("hidden")
+                btnCheck.textContent = "↻ I've signed in — Refresh"
+                btnCheck.disabled = false
+            }
+        })
+    }
 }
 
 function setupListeners() {
@@ -97,37 +125,10 @@ function setupListeners() {
 }
 
 // ── AUTH ──────────────────────────────────────────────
-async function handleLogin() {
-    const username = document.getElementById("login-username").value.trim()
-    const password = document.getElementById("login-password").value
-    const errorEl = document.getElementById("login-error")
-    const btn = document.getElementById("btn-login")
-
-    if (!username || !password) {
-        showError(errorEl, "Enter username and password")
-        return
-    }
-
-    btn.disabled = true
-    btn.textContent = "Logging in..."
-    errorEl.classList.add("hidden")
-
-    const result = await sendMessage({ type: "LOGIN", username, password })
-
-    if (result?.success) {
-        showMain(result.user)
-    } else {
-        showError(errorEl, result?.error || "Login failed")
-        btn.disabled = false
-        btn.textContent = "Login"
-    }
-}
-
 async function handleLogout() {
     await sendMessage({ type: "LOGOUT" })
-    document.getElementById("login-username").value = ""
-    document.getElementById("login-password").value = ""
     showScreen("login")
+    setupLoginListeners()
 }
 
 // ── TABS ──────────────────────────────────────────────

@@ -1,4 +1,5 @@
 const API_BASE = "https://mindvault-wspy.onrender.com"
+const WEB_APP_URL = "https://mind-vault-ecru.vercel.app"
 
 // ── TOKEN MANAGEMENT ──────────────────────────────────
 
@@ -15,14 +16,12 @@ async function getUser() {
         chrome.storage.local.get(["mv_user"], result => {
             try {
                 resolve(result.mv_user ? JSON.parse(result.mv_user) : null)
-            } catch {
-                resolve(null)
-            }
+            } catch { resolve(null) }
         })
     })
 }
 
-async function saveToken(token, user) {
+async function saveTokenAndUser(token, user) {
     return new Promise(resolve => {
         chrome.storage.local.set({
             mv_token: token,
@@ -37,23 +36,47 @@ async function clearToken() {
     })
 }
 
+// ── Try to get a fresh Firebase token from an open web app tab ───────────
+// The web app tab runs React + Firebase SDK, so it can call
+// auth.currentUser.getIdToken(true) to get a fresh token.
+// We inject a tiny script into the tab that reads from window.__mv_fresh_token
+// which AuthContext sets on the window object.
+
+async function tryRefreshTokenFromWebApp() {
+    try {
+        const tabs = await chrome.tabs.query({ url: WEB_APP_URL + "/*" })
+        if (!tabs.length) return null
+
+        const tab = tabs[0]
+        const results = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+                return window.__mv_fresh_token || null
+            }
+        })
+
+        const freshToken = results?.[0]?.result
+        return freshToken || null
+    } catch {
+        return null
+    }
+}
+
 // ── API CLIENT ────────────────────────────────────────
 
-async function apiCall(endpoint, options = {}) {
-    const token = await getToken()
+async function apiCall(endpoint, options = {}, token = null) {
+    const authToken = token || await getToken()
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
         headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
             ...(options.headers || {})
         }
     })
 
     if (response.status === 401) {
-        // token expired or invalid — clear it
-        await clearToken()
         return { error: "unauthorized", status: 401 }
     }
 
@@ -63,36 +86,44 @@ async function apiCall(endpoint, options = {}) {
 
 // ── AUTH ──────────────────────────────────────────────
 
-async function login(username, password) {
-    const result = await apiCall("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password })
-    })
-
-    if (result.ok) {
-        await saveToken(result.data.access_token, result.data.user)
-        return { success: true, user: result.data.user }
-    }
-
-    return { success: false, error: result.data?.detail || "Login failed" }
-}
-
-async function logout() {
-    await clearToken()
-    return { success: true }
-}
+// No login() function needed — token is set by the web app via Firebase.
+// Extension just reads the token from chrome.storage.local.
 
 async function checkAuth() {
     const token = await getToken()
     if (!token) return { authenticated: false }
 
-    const result = await apiCall("/auth/me")
+    // First attempt with stored token
+    const result = await apiCall("/auth/me", {}, token)
+
     if (result.ok) {
+        await saveTokenAndUser(token, result.data)
         return { authenticated: true, user: result.data }
     }
 
-    await clearToken()
+    // Token stale (401) — try to get a fresh one from open web app tab
+    if (result.status === 401) {
+        const freshToken = await tryRefreshTokenFromWebApp()
+
+        if (freshToken) {
+            const retryResult = await apiCall("/auth/me", {}, freshToken)
+            if (retryResult.ok) {
+                await saveTokenAndUser(freshToken, retryResult.data)
+                return { authenticated: true, user: retryResult.data }
+            }
+        }
+
+        // Truly expired — clear and ask user to re-login
+        await clearToken()
+        return { authenticated: false }
+    }
+
     return { authenticated: false }
+}
+
+async function logout() {
+    await clearToken()
+    return { success: true }
 }
 
 // ── NOTES ─────────────────────────────────────────────
@@ -152,9 +183,6 @@ async function handleMessage(message) {
 
         case "CHECK_AUTH":
             return await checkAuth()
-
-        case "LOGIN":
-            return await login(message.username, message.password)
 
         case "LOGOUT":
             return await logout()

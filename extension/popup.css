@@ -97,6 +97,38 @@ body {
     text-decoration: none;
 }
 
+.not-logged-in-msg {
+    text-align: center;
+    color: #6b6b80;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: rgba(124, 58, 237, 0.06);
+    border-radius: 10px;
+    border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.not-logged-in-msg p {
+    margin-bottom: 4px;
+}
+
+.btn-secondary {
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    color: #7c3aed;
+    border: 1px solid rgba(124, 58, 237, 0.35);
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.btn-secondary:hover {
+    background: rgba(124, 58, 237, 0.08);
+}
+
 /* HEADER */
 .header {
     display: flex;
@@ -363,6 +395,7 @@ body {
     margin-top: 4px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }

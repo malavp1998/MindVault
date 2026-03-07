@@ -15,17 +15,20 @@
             <div class="logo">
                 <span class="logo-icon">🧠</span>
                 <h1>MindVault</h1>
-                <p>Login to your vault</p>
+                <p>AI Second Brain</p>
             </div>
             <div class="form">
-                <input id="login-username" type="text" placeholder="Username" class="input" />
-                <input id="login-password" type="password" placeholder="Password" class="input" />
+                <div class="not-logged-in-msg">
+                    <p>You're not signed in.</p>
+                    <p>Open MindVault and sign in, then come back here.</p>
+                </div>
                 <div id="login-error" class="error hidden"></div>
-                <button id="btn-login" class="btn btn-primary">Login</button>
-                <p class="hint">
-                    New user? Register at
-                    <a href="https://mind-vault-ecru.vercel.app/login" target="_blank">MindVault</a>
-                </p>
+                <button id="btn-open-webapp" class="btn btn-primary">
+                    Open MindVault to Sign In
+                </button>
+                <button id="btn-check-login" class="btn btn-secondary" style="margin-top:8px;">
+                    ↻ I've signed in — Refresh
+                </button>
             </div>
         </div>
 

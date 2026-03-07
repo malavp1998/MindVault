@@ -25,10 +25,15 @@ export function AuthProvider({ children }) {
                 };
                 setToken(idToken);
                 setUser(userData);
+
+                // Expose for Chrome extension token refresh
+                if (typeof window !== "undefined") window.__mv_fresh_token = idToken;
+
                 if (typeof chrome !== "undefined" && chrome.storage)
                     chrome.storage.local.set({ mv_token: idToken, mv_user: JSON.stringify(userData) });
             } else {
                 setUser(null); setToken(null);
+                if (typeof window !== "undefined") window.__mv_fresh_token = null;
                 if (typeof chrome !== "undefined" && chrome.storage)
                     chrome.storage.local.remove(["mv_token", "mv_user"]);
             }
@@ -42,6 +47,7 @@ export function AuthProvider({ children }) {
             if (auth.currentUser) {
                 const newToken = await auth.currentUser.getIdToken(true);
                 setToken(newToken);
+                if (typeof window !== "undefined") window.__mv_fresh_token = newToken;
                 if (typeof chrome !== "undefined" && chrome.storage)
                     chrome.storage.local.set({ mv_token: newToken });
             }
