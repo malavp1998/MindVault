@@ -50,6 +50,7 @@ async function tryRefreshTokenFromWebApp() {
         const tab = tabs[0]
         const results = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
+            world: "MAIN", // MUST run in MAIN world to read page's window variables
             func: () => {
                 return window.__mv_fresh_token || null
             }
@@ -57,7 +58,8 @@ async function tryRefreshTokenFromWebApp() {
 
         const freshToken = results?.[0]?.result
         return freshToken || null
-    } catch {
+    } catch (e) {
+        console.warn("[MindVault] cross-tab token refresh failed:", e)
         return null
     }
 }
@@ -90,12 +92,37 @@ async function apiCall(endpoint, options = {}, token = null) {
 // Extension just reads the token from chrome.storage.local.
 
 async function checkAuth() {
-    const token = await getToken()
-    if (!token) return { authenticated: false }
+    let token = await getToken()
 
-    const result = await apiCall("/auth/me")
+    // If no token stored locally, try grabbing from an open web app tab immediately
+    if (!token) {
+        token = await tryRefreshTokenFromWebApp()
+        if (!token) return { authenticated: false }
+    }
+
+    // First attempt with stored token
+    const result = await apiCall("/auth/me", {}, token)
+
     if (result.ok) {
+        await saveTokenAndUser(token, result.data)
         return { authenticated: true, user: result.data }
+    }
+
+    // Token stale (401) — try to get a fresh one from open web app tab
+    if (result.status === 401) {
+        const freshToken = await tryRefreshTokenFromWebApp()
+
+        if (freshToken) {
+            const retryResult = await apiCall("/auth/me", {}, freshToken)
+            if (retryResult.ok) {
+                await saveTokenAndUser(freshToken, retryResult.data)
+                return { authenticated: true, user: retryResult.data }
+            }
+        }
+
+        // Truly expired — clear and ask user to re-login
+        await clearToken()
+        return { authenticated: false }
     }
 
     await clearToken()
