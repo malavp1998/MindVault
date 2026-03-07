@@ -40,14 +40,16 @@ async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
     if not rows:
         return []
 
-    # Check if today's session is already completed
     today_session_result = await db.execute(text("""
-        SELECT notes_completed FROM revision_sessions
+        SELECT notes_completed, notes_due FROM revision_sessions
         WHERE user_id = :uid AND date = CURRENT_DATE
     """), {"uid": str(user_id)})
     today_session = today_session_result.mappings().first()
 
-    if today_session and today_session["notes_completed"] >= REVISION_THRESHOLD:
+    # If they actually finished the exact number of notes they were supposed to review today
+    if today_session and \
+       (today_session["notes_completed"] >= REVISION_THRESHOLD or \
+       (today_session["notes_due"] > 0 and today_session["notes_completed"] >= today_session["notes_due"])):
         return []
 
     notes_with_scores = []

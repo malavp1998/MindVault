@@ -50,8 +50,8 @@ async def get_queue(
         # Check if today's session already exists
         session_res = await db.execute(
             text("""
-                INSERT INTO revision_sessions (id, user_id, date, notes_due)
-                VALUES (gen_random_uuid(), :uid, CURRENT_DATE, :due)
+                INSERT INTO revision_sessions (id, user_id, date, notes_due, notes_completed)
+                VALUES (gen_random_uuid(), :uid, CURRENT_DATE, :due, 0)
                 ON CONFLICT ON CONSTRAINT uq_user_date DO UPDATE SET notes_due = :due
                 RETURNING id
             """),
