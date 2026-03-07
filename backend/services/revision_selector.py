@@ -57,13 +57,10 @@ async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
             next_dt = note["next_review_date"]
             if isinstance(next_dt, str):
                 next_dt = datetime.fromisoformat(next_dt)
-            if next_dt.tzinfo is not None:
-                # Compare aware to aware
-                if next_dt.date() > now.astimezone(next_dt.tzinfo).date():
-                    continue
-            else:
-                if next_dt.date() > now.date():
-                    continue
+            
+            # Convert both to naive UTC dates to avoid IST/UTC offset issues
+            if next_dt.replace(tzinfo=None).date() > now.date():
+                continue
 
         memory_state = {
             "days_since_last_review": float(note["days_since_last_review"] or 999),
