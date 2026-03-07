@@ -11,12 +11,17 @@ import uuid
 import numpy as np
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+import concurrent.futures
 
 from models import Note, Topic
 from services.llm import llm_complete
 from database import async_session
 
 logger = logging.getLogger(__name__)
+
+# ── Dedicated executor to prevent UMAP from starving the default asyncio thread pool ──
+# We restrict it to 1 thread so multiple rapid clustering requests don't swamp the CPU
+clustering_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
 # ── In-memory cache of fitted clusterer for incremental predictions ────────
 _fitted_clusterer = None
@@ -56,7 +61,6 @@ def _run_umap_hdbscan(X: np.ndarray):
         n_neighbors=n_neighbors,
         min_dist=0.0,       # tight clusters → better density estimation
         metric="cosine",    # critical for embedding space
-        random_state=42,
         low_memory=False,
     )
     X_reduced = reducer_cluster.fit_transform(X)
@@ -80,7 +84,6 @@ def _run_umap_hdbscan(X: np.ndarray):
         n_neighbors=n_neighbors,
         min_dist=0.3,       # allow spread for visual clarity
         metric="cosine",
-        random_state=42,
         low_memory=False,
     )
     coords_2d = reducer_2d.fit_transform(X)
@@ -124,11 +127,13 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
             else:
                 try:
                     labels, probabilities, coords_2d = await asyncio.wait_for(
-                        asyncio.to_thread(_run_umap_hdbscan, X),
-                        timeout=120.0,
+                        asyncio.get_running_loop().run_in_executor(
+                            clustering_executor, _run_umap_hdbscan, X
+                        ),
+                        timeout=300.0,
                     )
                 except asyncio.TimeoutError:
-                    logger.error("UMAP/HDBSCAN timed out after 120s — skipping clustering run")
+                    logger.error("UMAP/HDBSCAN timed out after 300s — skipping clustering run")
                     return
 
             logger.info(
