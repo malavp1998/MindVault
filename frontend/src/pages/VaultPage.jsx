@@ -267,20 +267,37 @@ export default function VaultPage() {
                             onClick={handleCreateNote}
                             disabled={isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())}
                             style={{
-                                background: 'var(--accent-color)',
-                                color: '#fff',
-                                border: 'none',
-                                padding: '10px 20px',
+                                background: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())
+                                    ? 'var(--bg-secondary)'
+                                    : 'linear-gradient(135deg, #10B981, #059669)',
+                                color: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'var(--text-muted)' : '#fff',
+                                border: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? '1px solid var(--border-color)' : 'none',
+                                padding: '10px 24px',
                                 borderRadius: 10,
                                 fontWeight: 600,
+                                fontSize: 14,
+                                boxShadow: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
                                 cursor: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'not-allowed' : 'pointer',
-                                opacity: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 0.6 : 1,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 8
+                                gap: 8,
+                                transition: 'all 0.2s ease',
+                                transform: isSaving ? 'scale(0.98)' : 'scale(1)'
+                            }}
+                            onMouseOver={(e) => {
+                                if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
+                                    e.currentTarget.style.transform = 'translateY(-1px)';
+                                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.35)';
+                                }
+                            }}
+                            onMouseOut={(e) => {
+                                if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
+                                }
                             }}
                         >
-                            {isSaving ? "Saving..." : "💾 Save Note"}
+                            {isSaving ? "⏳ Saving..." : "💾 Save Note"}
                         </button>
                     </div>
                 </div>
