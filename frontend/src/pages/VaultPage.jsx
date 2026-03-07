@@ -515,6 +515,25 @@ export default function VaultPage() {
                                     </div>
                                 )}
 
+                                {note.estimated_retention !== undefined && note.estimated_retention !== null && (
+                                    <div style={{ marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 10 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Memory Retention</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: note.estimated_retention >= 0.70 ? '#10B981' : note.estimated_retention >= 0.40 ? '#F59E0B' : '#EF4444' }}>
+                                                {Math.round(note.estimated_retention * 100)}%
+                                            </span>
+                                        </div>
+                                        <div style={{ height: 4, background: 'var(--bg-secondary)', borderRadius: 2, overflow: 'hidden' }}>
+                                            <div style={{
+                                                height: '100%',
+                                                width: `${Math.round(note.estimated_retention * 100)}%`,
+                                                background: note.estimated_retention >= 0.70 ? '#10B981' : note.estimated_retention >= 0.40 ? '#F59E0B' : '#EF4444',
+                                                transition: 'width 0.5s ease'
+                                            }} />
+                                        </div>
+                                    </div>
+                                )}
+
                                 <button
                                     onClick={(e) => handleDelete(e, note.id)}
                                     style={{

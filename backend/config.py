@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     recluster_every_n: int = 20
 
+    # Spaced Repetition Settings
+    REVISION_THRESHOLD: int = 5
+    MAX_INTERVAL_DAYS: int = 180
+    MASTERED_THRESHOLD_DAYS: int = 60
+
     # LangSmith Monitoring
     langchain_tracing_v2: str = "true"
     langchain_api_key: str = ""

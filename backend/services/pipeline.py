@@ -102,6 +102,14 @@ async def process_note(note_id: uuid.UUID) -> None:
             
             logger.info(f"✅ Successfully processed note: {title}")
             
+            # --- Initialize Spaced Repetition Memory State ---
+            if note.user_id:
+                from services.revision_selector import initialize_memory_state
+                try:
+                    await initialize_memory_state(db, note_id, note.user_id)
+                except Exception as e:
+                    logger.error(f"Failed to initialize memory state for note {note_id}: {e}")
+            
             # --- Invalidate user's RAG and chat cache (vault changed) ---
             note_user_id = note.user_id
             if note_user_id:

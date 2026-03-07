@@ -18,6 +18,8 @@ from routes.auth import limiter
 from mcp_server import mcp
 from services.semantic_cache import cleanup_expired_cache
 from services.monitoring import is_monitoring_enabled
+from services.revision_selector import update_retention_scores
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from config import get_settings
 
 from slowapi import _rate_limit_exceeded_handler
@@ -43,7 +45,22 @@ async def lifespan(app: FastAPI):
     logger.info("✅ Database initialized with pgvector extension")
     await cleanup_expired_cache()
     logger.info("🧹 Expired cache cleaned on startup")
+    
+    # Setup Spaced Repetition nightly job
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        update_retention_scores,
+        trigger="cron",
+        hour=0,
+        minute=0,
+        id="update_retention_scores",
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("📅 APScheduler started with update_retention_scores job")
+    
     yield
+    scheduler.shutdown()
     logger.info("👋 MindVault shutting down")
 
 
@@ -74,6 +91,9 @@ app.include_router(topics_router, prefix="/api")
 app.include_router(graph_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
 app.include_router(cache_router, prefix="/api")
+
+from routes.revision import router as revision_router
+app.include_router(revision_router, prefix="/api")
 
 # MCP server mount
 app.mount("/mcp", mcp.streamable_http_app())

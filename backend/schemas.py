@@ -60,6 +60,7 @@ class NoteOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     backlinks: list[NoteLinkOut] = []
+    estimated_retention: float | None = None
 
     model_config = {"from_attributes": True}
 
@@ -78,6 +79,7 @@ class NoteListOut(BaseModel):
     is_processed: bool = False
     processed: bool = False
     created_at: datetime
+    estimated_retention: float | None = None
 
     model_config = {"from_attributes": True}
 

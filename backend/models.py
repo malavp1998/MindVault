@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlalchemy import String, Text, DateTime, Float, ForeignKey, Integer, JSON, Boolean, VARCHAR
+from sqlalchemy import String, Text, DateTime, Date, Float, ForeignKey, Integer, JSON, Boolean, VARCHAR, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from pgvector.sqlalchemy import Vector
@@ -225,4 +225,109 @@ class SemanticCache(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+
+# ─── Spaced Repetition Models ───────────────────────────────────
+
+class NoteMemoryState(Base):
+    __tablename__ = "note_memory_state"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    review_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_recall_rating: Mapped[Optional[str]] = mapped_column(VARCHAR(10), nullable=True)
+    avg_recall_score: Mapped[float] = mapped_column(Float, default=0.5)
+    stability: Mapped[float] = mapped_column(Float, default=1.0)
+    estimated_retention: Mapped[float] = mapped_column(Float, default=1.0)
+    next_review_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    interval_days: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint('note_id', 'user_id', name='uq_note_user'),
+    )
+
+
+class ReviewEvent(Base):
+    __tablename__ = "review_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    session_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    rating: Mapped[str] = mapped_column(VARCHAR(10), nullable=False)
+    interval_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    interval_after: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stability_before: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    stability_after: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    retention_at_review: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    reviewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class RevisionSession(Base):
+    __tablename__ = "revision_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    notes_due: Mapped[int] = mapped_column(Integer, default=5)
+    notes_completed: Mapped[int] = mapped_column(Integer, default=0)
+    notes_skipped: Mapped[int] = mapped_column(Integer, default=0)
+    forgot_count: Mapped[int] = mapped_column(Integer, default=0)
+    hard_count: Mapped[int] = mapped_column(Integer, default=0)
+    good_count: Mapped[int] = mapped_column(Integer, default=0)
+    easy_count: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    streak_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'date', name='uq_user_date'),
+    )
+
+
+class UserRevisionStat(Base):
+    __tablename__ = "user_revision_stats"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    current_streak: Mapped[int] = mapped_column(Integer, default=0)
+    longest_streak: Mapped[int] = mapped_column(Integer, default=0)
+    total_reviews: Mapped[int] = mapped_column(Integer, default=0)
+    total_sessions: Mapped[int] = mapped_column(Integer, default=0)
+    last_session_date: Mapped[Optional[datetime]] = mapped_column(Date, nullable=True)
+    notes_mastered: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
     )

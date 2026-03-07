@@ -9,14 +9,25 @@ import TopicsPage from './pages/TopicsPage';
 import NotePage from './pages/NotePage';
 import SearchPage from './pages/SearchPage';
 import ChatPage from './pages/ChatPage';
+import RevisionPage from './pages/RevisionPage';
+import api from './api';
 
 function Sidebar() {
     const { user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [dueCount, setDueCount] = useState(0);
+
+    useEffect(() => {
+        if (!user) return;
+        api.get("/api/revision/stats")
+            .then(res => setDueCount(res.data.notes_due_today))
+            .catch(() => { });
+    }, [user]);
 
     const navItems = [
         { to: "/", end: true, icon: "📚", label: "Vault" },
+        { to: "/revision", icon: "📖", label: "Revision", badge: dueCount },
         { to: "/topics", icon: "🗺️", label: "Knowledge Graph" },
         { to: "/search", icon: "🔍", label: "Search" },
         { to: "/chat", icon: "💬", label: "Chat" },
@@ -35,11 +46,18 @@ function Sidebar() {
             </div>
 
             <div style={{ padding: "0 10px", flex: 1 }}>
-                {navItems.map(({ to, end, icon, label }) => (
+                {navItems.map(({ to, end, icon, label, badge }) => (
                     <NavLink key={to} to={to} end={end}
                         className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, marginBottom: 2, fontSize: 14, fontWeight: 500, textDecoration: "none", transition: "all 0.15s" }}>
-                        <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{icon}</span> {label}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, marginBottom: 2, fontSize: 14, fontWeight: 500, textDecoration: "none", transition: "all 0.15s" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{icon}</span> {label}
+                        </div>
+                        {badge > 0 && (
+                            <span style={{ background: "#EF4444", color: "white", fontSize: 11, fontWeight: "bold", padding: "2px 6px", borderRadius: 10 }}>
+                                {badge}
+                            </span>
+                        )}
                     </NavLink>
                 ))}
             </div>
@@ -85,6 +103,7 @@ function AuthenticatedLayout() {
                 <Routes>
                     <Route path="/" element={<VaultPage />} />
                     <Route path="/vault" element={<VaultPage />} />
+                    <Route path="/revision" element={<RevisionPage />} />
                     <Route path="/topics" element={<TopicsPage />} />
                     <Route path="/note/:id" element={<NotePage />} />
                     <Route path="/search" element={<SearchPage />} />

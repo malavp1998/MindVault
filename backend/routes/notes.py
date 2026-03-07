@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from models import Note, NoteLink, Topic, User
+from models import Note, NoteLink, Topic, User, NoteMemoryState
 from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
@@ -272,7 +272,8 @@ async def list_notes(
 ):
     """List all notes with optional filters — scoped to current user."""
     query = (
-        select(Note)
+        select(Note, NoteMemoryState.estimated_retention)
+        .outerjoin(NoteMemoryState, (Note.id == NoteMemoryState.note_id) & (NoteMemoryState.user_id == current_user.id))
         .where(Note.user_id == current_user.id)
         .order_by(Note.created_at.desc())
     )
@@ -286,10 +287,10 @@ async def list_notes(
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    notes = result.scalars().all()
+    rows = result.all()
 
     out = []
-    for n in notes:
+    for n, retention in rows:
         item = NoteListOut(
             id=n.id,
             title=n.title,
@@ -304,6 +305,7 @@ async def list_notes(
             is_processed=n.is_processed,
             processed=n.processed,
             created_at=n.created_at,
+            estimated_retention=retention,
         )
         if n.topic_id:
             topic = await db.get(Topic, n.topic_id)
@@ -637,7 +639,12 @@ async def _note_with_backlinks(db: AsyncSession, note: Note) -> NoteOut:
         topic = await db.get(Topic, note.topic_id)
         if topic:
             topic_name = topic.name
+            
+    # Get memory state to attach estimated retention
+    mem_result = await db.execute(select(NoteMemoryState.estimated_retention).where(NoteMemoryState.note_id == note.id))
+    retention = mem_result.scalar_one_or_none()
 
     out = _note_to_out(note, backlinks)
     out.topic_name = topic_name
+    out.estimated_retention = retention
     return out
