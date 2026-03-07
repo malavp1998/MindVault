@@ -173,6 +173,13 @@ async function handleSavePage() {
     let content = ""
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+
+        // Inject Readability library first
+        await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ["lib/Readability.js"]
+        }).catch(() => {/* ignore errors if already injected or restricted */ })
+
         const results = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: () => {
@@ -181,9 +188,10 @@ async function handleSavePage() {
                     const doc = document.cloneNode(true)
                     const reader = new Readability(doc)
                     const article = reader.parse()
-                    return article?.textContent || document.body.innerText
+                    // clean up extra whitespace
+                    return (article?.textContent || document.body.innerText).replace(/\n\s*\n/g, '\n\n').trim()
                 }
-                return document.body.innerText
+                return document.body.innerText.replace(/\n\s*\n/g, '\n\n').trim()
             }
         })
         content = results[0]?.result || ""

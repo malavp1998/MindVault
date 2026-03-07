@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getNote, processNote, deleteNote, api } from '../api';
+import ReactMarkdown from 'react-markdown';
 
 export default function NotePage() {
     const { id } = useParams();
@@ -285,7 +286,9 @@ export default function NotePage() {
             {note.summary && (
                 <div className="note-section">
                     <h3 className="note-section-title">✨ AI Summary</h3>
-                    <div className="note-summary-box">{note.summary}</div>
+                    <div className="note-summary-box">
+                        <ReactMarkdown>{note.summary}</ReactMarkdown>
+                    </div>
                 </div>
             )}
 

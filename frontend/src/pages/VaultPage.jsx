@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Masonry from 'react-masonry-css';
 import { listNotes, listTopics, deleteNote } from '../api';
+import ReactMarkdown from 'react-markdown';
 
 export default function VaultPage() {
     const [notes, setNotes] = useState([]);
@@ -139,7 +140,11 @@ export default function VaultPage() {
                                 style={{ animationDelay: `${Math.random() * 0.2}s`, animation: 'fadeInUp 0.4s ease both' }}
                             >
                                 <div className="card-title">{note.title}</div>
-                                {note.summary && <div className="card-summary">{note.summary}</div>}
+                                {note.summary && (
+                                    <div className="card-summary">
+                                        <ReactMarkdown>{note.summary}</ReactMarkdown>
+                                    </div>
+                                )}
                                 <div className="card-meta">
                                     <span>{new Date(note.created_at).toLocaleDateString()}</span>
                                     <div>

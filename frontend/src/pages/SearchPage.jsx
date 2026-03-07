@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchNotes } from '../api';
+import ReactMarkdown from 'react-markdown';
 
 export default function SearchPage() {
     const [query, setQuery] = useState('');
@@ -104,7 +105,9 @@ export default function SearchPage() {
                                 : "Answered by Groq 🇬🇧"}
                         </div>
                     </div>
-                    <div className="rag-answer-text">{results.rag.answer}</div>
+                    <div className="rag-answer-text">
+                        <ReactMarkdown>{results.rag.answer}</ReactMarkdown>
+                    </div>
                 </div>
             )}
 
@@ -136,7 +139,9 @@ export default function SearchPage() {
                                     <div style={{ flex: 1 }}>
                                         <div className="card-title">{result.note.title}</div>
                                         {result.note.summary && (
-                                            <div className="card-summary">{result.note.summary}</div>
+                                            <div className="card-summary">
+                                                <ReactMarkdown>{result.note.summary}</ReactMarkdown>
+                                            </div>
                                         )}
                                     </div>
                                     <span className="similarity-badge" style={{ marginLeft: 12, flexShrink: 0 }}>

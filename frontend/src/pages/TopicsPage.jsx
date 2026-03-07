@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import GraphView from "../components/GraphView";
 import { api } from "../api";
+import ReactMarkdown from 'react-markdown';
 
 const API = "/api";
 
@@ -378,13 +379,13 @@ function TopicPanel({ data, navigate }) {
                         {note.title || "Untitled"}
                     </p>
                     {note.summary && (
-                        <p style={{
+                        <div style={{
                             fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px 0",
                             overflow: "hidden", display: "-webkit-box",
                             WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                         }}>
-                            {note.summary}
-                        </p>
+                            <ReactMarkdown>{note.summary}</ReactMarkdown>
+                        </div>
                     )}
                     <TagRow tags={note.auto_tags} color="#3B82F6" bg="rgba(59,130,246,0.1)" />
                 </div>
@@ -402,9 +403,9 @@ function NotePanel({ note, navigate }) {
                     <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                         AI Summary
                     </p>
-                    <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
-                        {note.summary}
-                    </p>
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                        <ReactMarkdown>{note.summary}</ReactMarkdown>
+                    </div>
                 </div>
             )}
 

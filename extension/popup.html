@@ -18,17 +18,15 @@
                 <p>AI Second Brain</p>
             </div>
             <div class="form">
-                <div
-                    style="text-align:center; color:#6b6b80; font-size:13px; line-height:1.6; margin-bottom:16px; padding:12px; background:rgba(124,58,237,0.06); border-radius:10px; border:1px solid rgba(124,58,237,0.15);">
-                    <p style="margin-bottom:4px; font-weight:600; color:#1a1a2e;">Not signed in</p>
+                <div class="not-logged-in-msg">
+                    <p style="margin-bottom:4px; font-weight:600; color:var(--text-primary);">Not signed in</p>
                     <p>Sign in on the MindVault web app, then click Refresh below.</p>
                 </div>
                 <div id="login-error" class="error hidden"></div>
                 <button id="btn-open-webapp" class="btn btn-primary">
                     Open MindVault →
                 </button>
-                <button id="btn-check-login" class="btn"
-                    style="margin-top:8px; background:transparent; color:#7c3aed; border:1px solid rgba(124,58,237,0.35);">
+                <button id="btn-check-login" class="btn btn-secondary" style="margin-top:8px;">
                     ↻ Refresh
                 </button>
             </div>
