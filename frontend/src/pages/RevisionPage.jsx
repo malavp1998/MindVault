@@ -135,7 +135,7 @@ export default function RevisionPage() {
     };
 
     return (
-        <div className="flex-1 flex flex-col items-center pt-10 sm:pt-16 pb-20 px-4 overflow-y-auto w-full h-full bg-gray-50 dark:bg-gray-900">
+        <div className="flex-1 flex flex-col items-center pt-10 sm:pt-16 pb-20 px-4 overflow-y-auto w-full h-full" style={{ background: 'var(--bg-primary)' }}>
             <div className="w-full max-w-3xl">
                 {loading && <RevisionSkeleton />}
 

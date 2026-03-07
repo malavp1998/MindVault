@@ -4,40 +4,39 @@ const RevisionProgress = ({ streak, current, total, ratings }) => {
     const progressPercent = Math.min(((current) / total) * 100, 100);
 
     return (
-        <div className="mb-10 w-full mt-2">
-            <div className="flex justify-between items-end mb-4 px-1">
-                <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3 tracking-tight">
-                    <span className="text-3xl">📚</span> Daily Revision
+        <div style={{ marginBottom: 40, width: '100%', marginTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, padding: '0 4px' }}>
+                <h2 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 12, letterSpacing: '-0.5px' }}>
+                    <span style={{ fontSize: 28 }}>📚</span> Daily Revision
                     {streak > 0 && (
-                        <span className="text-sm font-bold bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 px-3 py-1 rounded-full shadow-sm ml-2">
+                        <span style={{ fontSize: 13, fontWeight: 700, background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', padding: '4px 12px', borderRadius: 20, marginLeft: 8 }}>
                             🔥 {streak} Day Streak
                         </span>
                     )}
                 </h2>
-                <span className="text-base font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
                     {Math.min(current, total)} / {total} done
                 </span>
             </div>
 
-            <div className="h-4 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden flex shadow-inner border border-gray-200/50 dark:border-gray-700/50">
+            <div style={{ height: 16, width: '100%', background: 'var(--bg-card)', borderRadius: 20, overflow: 'hidden', display: 'flex', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)', border: '1px solid var(--border)' }}>
                 <div
-                    className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-700 ease-out"
-                    style={{ width: `${progressPercent}%` }}
+                    style={{ height: '100%', background: 'var(--gradient-primary)', transition: 'all 0.7s ease-out', width: `${progressPercent}%` }}
                 />
             </div>
 
-            <div className="flex gap-2.5 mt-4 h-3 px-1">
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, height: 12, padding: '0 4px' }}>
                 {ratings.map((rating, idx) => {
-                    let bgColor = 'bg-gray-200 dark:bg-gray-700';
-                    if (rating === 'forgot') bgColor = 'bg-red-500 shadow-sm shadow-red-500/30';
-                    if (rating === 'hard') bgColor = 'bg-orange-500 shadow-sm shadow-orange-500/30';
-                    if (rating === 'good') bgColor = 'bg-green-500 shadow-sm shadow-green-500/30';
-                    if (rating === 'easy') bgColor = 'bg-purple-500 shadow-sm shadow-purple-500/30';
+                    let bg = 'rgba(229, 231, 235, 1)';
+                    if (rating === 'forgot') bg = '#ef4444';
+                    if (rating === 'hard') bg = '#f59e0b';
+                    if (rating === 'good') bg = '#10b981';
+                    if (rating === 'easy') bg = '#8b5cf6';
 
                     return (
                         <div
                             key={idx}
-                            className={`w-3 h-3 rounded-full ${bgColor}`}
+                            style={{ width: 12, height: 12, borderRadius: '50%', background: bg, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}
                             title={rating}
                         />
                     );

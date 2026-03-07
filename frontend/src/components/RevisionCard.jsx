@@ -22,113 +22,168 @@ const RevisionCard = ({ note, total, currentIdx, onRate, onSkip, rateResult }) =
     };
 
     return (
-        <div className="bg-white dark:bg-[#1A1A2E] rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none border border-gray-100 dark:border-gray-800 p-8 sm:p-12 transition-all relative overflow-hidden" style={{ minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            padding: 32,
+            boxShadow: 'var(--shadow-lg)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            minHeight: '400px',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            overflow: 'hidden'
+        }}>
             {/* Top Meta */}
-            <div className="flex justify-between items-start mb-8">
-                <div className="flex-1 pr-6">
-                    <span className="text-sm font-bold text-indigo-500 uppercase tracking-widest mb-2 block">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+                <div style={{ flex: 1, paddingRight: 24 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-light)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, display: 'block' }}>
                         Note {currentIdx + 1} of {total}
                     </span>
-                    <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white mt-1 leading-snug tracking-tight">
+                    <h3 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4, lineHeight: 1.3, letterSpacing: '-0.5px' }}>
                         {note.title}
                     </h3>
-                    <div className="flex gap-2 flex-wrap mt-5">
-                        {[...(note.user_tags || []), ...(note.auto_tags || [])].slice(0, 4).map(t => (
-                            <span key={t} className="px-3 py-1.5 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 text-xs rounded-full font-bold uppercase tracking-wide">
-                                {t}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 16 }}>
+                        {Array.from(new Set([...(note.user_tags || []), ...(note.auto_tags || [])])).slice(0, 5).map(t => (
+                            <span key={t} className="tag" style={{ border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                                #{t}
                             </span>
                         ))}
                     </div>
                 </div>
 
                 {/* Retention Badge */}
-                <div className="flex items-center gap-2.5 bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700 px-4 py-2 rounded-full cursor-default shrink-0" title={`Estimated memory retention: ${retentionPct}%`}>
-                    <div className={`w-3 h-3 rounded-full shadow-inner ${retentionColor}`} />
-                    <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-primary)',
+                    border: '1px solid var(--border)', padding: '6px 14px', borderRadius: 24, flexShrink: 0
+                }} title={`Estimated memory retention: ${retentionPct}%`}>
+                    <div className={retentionColor} style={{ width: 8, height: 8, borderRadius: '50%' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
                         {retentionPct}%
                     </span>
                 </div>
             </div>
 
             {!revealed && (
-                <div className="flex-1 flex flex-col justify-center items-center mt-12 mb-8 animate-fade-in">
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginTop: 40, marginBottom: 20 }}>
                     <button
                         onClick={() => setRevealed(true)}
-                        className="flex items-center gap-3 px-10 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 focus:ring-4 focus:ring-indigo-500/30 text-lg"
+                        style={{
+                            background: 'var(--gradient-primary)',
+                            color: 'white',
+                            border: 'none',
+                            padding: '12px 28px',
+                            borderRadius: 'var(--radius)',
+                            fontWeight: 600,
+                            fontSize: 15,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            cursor: 'pointer',
+                            boxShadow: '0 4px 16px rgba(124, 58, 237, 0.3)',
+                            transition: 'all 0.2s ease',
+                        }}
+                        onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(124, 58, 237, 0.4)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(124, 58, 237, 0.3)'; }}
                     >
-                        <span className="text-2xl">👁</span>
+                        <span style={{ fontSize: 18 }}>👁️</span>
                         Reveal Summary
                     </button>
-                    <p className="mt-6 text-gray-400 dark:text-gray-500 text-sm font-medium">Try to recall the contents before revealing.</p>
+                    <p style={{ marginTop: 16, color: 'var(--text-muted)', fontSize: 13, fontWeight: 500 }}>Try to recall the contents before revealing.</p>
                 </div>
             )}
 
             {revealed && (
-                <div className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-700/50 animate-fade-in flex-1 flex flex-col">
-                    <div className="mb-10">
-                        <h4 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">AI Insight</h4>
-                        <div className="prose prose-base dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-6 sm:p-8 rounded-2xl border border-gray-100 dark:border-gray-700/50 leading-relaxed">
-                            <ReactMarkdown>{note.summary || "No summary available."}</ReactMarkdown>
+                <div style={{ marginTop: 20, paddingTop: 24, borderTop: '1px solid var(--border)', flex: 1, display: 'flex', flexDirection: 'column', animation: 'fadeInUp 0.4s ease' }}>
+                    <div style={{ marginBottom: 32 }}>
+                        <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 12 }}>AI Insight</h4>
+                        <div className="rag-answer" style={{ marginBottom: 0, padding: 20 }}>
+                            <div className="rag-answer-text">
+                                <ReactMarkdown>{note.summary || "No summary available for this note."}</ReactMarkdown>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="mt-auto">
+                    <div style={{ mt: 'auto' }}>
                         {!rated ? (
-                            <div className="animate-fade-in-up bg-white dark:bg-[#1A1A2E]">
-                                <p className="text-center font-bold text-gray-800 dark:text-gray-200 mb-6 text-lg">
+                            <div style={{ animation: 'fadeInUp 0.4s ease', background: 'var(--bg-card)' }}>
+                                <p style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 20, fontSize: 15 }}>
                                     How easily did you recall this?
                                 </p>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
-                                    <button onClick={() => handleRateClick('forgot')} className="py-5 px-2 rounded-2xl border-2 border-red-100 bg-white hover:bg-red-50 hover:border-red-200 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-red-900/20 dark:hover:border-red-800/50 transition-all text-center group shadow-sm">
-                                        <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">😰</div>
-                                        <div className="font-extrabold text-red-600 dark:text-red-400 text-sm uppercase tracking-wide">Forgot</div>
-                                    </button>
-                                    <button onClick={() => handleRateClick('hard')} className="py-5 px-2 rounded-2xl border-2 border-orange-100 bg-white hover:bg-orange-50 hover:border-orange-200 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-orange-900/20 dark:hover:border-orange-800/50 transition-all text-center group shadow-sm">
-                                        <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">😐</div>
-                                        <div className="font-extrabold text-orange-600 dark:text-orange-400 text-sm uppercase tracking-wide">Hard</div>
-                                    </button>
-                                    <button onClick={() => handleRateClick('good')} className="py-5 px-2 rounded-2xl border-2 border-green-100 bg-white hover:bg-green-50 hover:border-green-200 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-green-900/20 dark:hover:border-green-800/50 transition-all text-center group shadow-sm">
-                                        <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🙂</div>
-                                        <div className="font-extrabold text-green-600 dark:text-green-400 text-sm uppercase tracking-wide">Good</div>
-                                    </button>
-                                    <button onClick={() => handleRateClick('easy')} className="py-5 px-2 rounded-2xl border-2 border-purple-100 bg-white hover:bg-purple-50 hover:border-purple-200 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-purple-900/20 dark:hover:border-purple-800/50 transition-all text-center group shadow-sm">
-                                        <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">😎</div>
-                                        <div className="font-extrabold text-purple-600 dark:text-purple-400 text-sm uppercase tracking-wide">Easy</div>
-                                    </button>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, maxWidth: 640, margin: '0 auto' }}>
+                                    {[
+                                        { id: 'forgot', icon: '😰', label: 'Forgot', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)' },
+                                        { id: 'hard', icon: '😐', label: 'Hard', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)' },
+                                        { id: 'good', icon: '🙂', label: 'Good', color: '#10b981', bg: 'rgba(16, 185, 129, 0.08)' },
+                                        { id: 'easy', icon: '😎', label: 'Easy', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.08)' }
+                                    ].map(btn => (
+                                        <button
+                                            key={btn.id}
+                                            onClick={() => handleRateClick(btn.id)}
+                                            style={{
+                                                padding: '20px 10px',
+                                                borderRadius: 'var(--radius)',
+                                                border: `1px solid ${btn.color}40`,
+                                                background: 'var(--bg-secondary)',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                gap: 8
+                                            }}
+                                            onMouseOver={(e) => { e.currentTarget.style.background = btn.bg; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = btn.color; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.background = 'var(--bg-secondary)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = `${btn.color}40`; }}
+                                        >
+                                            <div style={{ fontSize: 32 }}>{btn.icon}</div>
+                                            <div style={{ fontWeight: 700, color: btn.color, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{btn.label}</div>
+                                        </button>
+                                    ))}
                                 </div>
 
-                                <div className="flex justify-center mt-8">
-                                    <button onClick={() => onSkip(note.id)} className="text-sm font-bold text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors px-4 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+                                    <button
+                                        onClick={() => onSkip(note.id)}
+                                        style={{
+                                            background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
+                                            cursor: 'pointer', padding: '8px 16px', borderRadius: 8, transition: 'all 0.2s'
+                                        }}
+                                        onMouseOver={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-primary)'; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                    >
                                         Skip for now
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-center py-6 animate-fade-in">
-                                <div className="text-5xl mb-4">
+                            <div style={{ textAlign: 'center', padding: '30px 0', animation: 'fadeInUp 0.3s ease' }}>
+                                <div style={{ fontSize: 48, marginBottom: 16 }}>
                                     {ratingVal === 'forgot' && '😰'}
                                     {ratingVal === 'hard' && '😐'}
                                     {ratingVal === 'good' && '🙂'}
-                                    {ratingVal === 'easy' && '😊'}
+                                    {ratingVal === 'easy' && '😎'}
                                 </div>
 
                                 {rateResult ? (
-                                    <div className="space-y-2">
-                                        <p className="font-bold text-lg text-gray-800 dark:text-gray-200">
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <p style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)' }}>
                                             {rateResult.message}
                                         </p>
-                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)' }}>
                                             Next review in {rateResult.new_interval} days
                                         </p>
                                         {rateResult.is_mastered && (
-                                            <span className="mt-2 inline-block px-3 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-400 rounded-full font-bold text-sm">
-                                                🏆 Mastered!
-                                            </span>
+                                            <div style={{ marginTop: 8 }}>
+                                                <span style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', borderRadius: 20, fontWeight: 700, fontSize: 13 }}>
+                                                    🏆 Mastered!
+                                                </span>
+                                            </div>
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="flex justify-center mt-4">
-                                        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
+                                        <div className="spinner" style={{ width: 24, height: 24, borderWidth: 2 }} />
                                     </div>
                                 )}
                             </div>
