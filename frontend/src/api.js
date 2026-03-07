@@ -17,6 +17,11 @@ api.interceptors.request.use(async (config) => {
 export const createNote = (data) =>
     api.post('/notes', data).then(r => r.data);
 
+export const createAudioNote = (formData) =>
+    api.post('/notes/audio', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(r => r.data);
+
 export const listNotes = (params = {}) =>
     api.get('/notes', { params }).then(r => r.data);
 

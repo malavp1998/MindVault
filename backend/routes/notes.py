@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import uuid
 import asyncio
-from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
+import json
+from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,7 +22,7 @@ from services.llm import summarize_youtube_video
 from services.agent import rag_agent
 from services.language import detect_language
 from services.pipeline import process_note
-from services.transcription import transcribe_youtube
+from services.transcription import transcribe_youtube, transcribe_audio_file
 from services.tagging import generate_tags
 from middleware.auth import get_current_user, CurrentUser
 from langsmith.run_helpers import get_current_run_tree
@@ -151,6 +152,55 @@ async def create_youtube_note(
     await db.refresh(note)
 
     # 4. Trigger standard AI async embedding / linking pipeline
+    background_tasks.add_task(process_note, note.id)
+
+    return _note_to_out(note)
+
+
+@router.post("/audio", response_model=NoteOut, status_code=201)
+async def create_audio_note(
+    audio: UploadFile = File(...),
+    title: str = Form(""),
+    user_tags: str = Form("[]"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Transcribe an uploaded audio file and save it as a new note."""
+    run = get_current_run_tree()
+    if run:
+        run.metadata["user_id"] = str(current_user.id)
+        run.metadata["username"] = current_user.email or "unknown"
+
+    try:
+        parsed_tags = json.loads(user_tags)
+    except Exception:
+        parsed_tags = []
+
+    # 1. Transcribe audio using Groq Whisper
+    try:
+        transcript_text, lang = await transcribe_audio_file(audio.file, audio.filename)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Audio transcription failed: {str(e)}")
+
+    if not transcript_text or not transcript_text.strip():
+        raise HTTPException(status_code=400, detail="Audio was empty or indiscernible.")
+
+    # 2. Save to DB
+    note = Note(
+        title=title or "[Voice Note]",
+        content=transcript_text,
+        source_url="MindVault Web (Voice)",
+        tags=["voice", "audio"],
+        user_tags=parsed_tags,
+        language=lang,
+        user_id=current_user.id,
+    )
+    db.add(note)
+    await db.flush()
+    await db.refresh(note)
+
+    # 3. Trigger async processing for summary, auto-tags, embeddings
     background_tasks.add_task(process_note, note.id)
 
     return _note_to_out(note)

@@ -7,6 +7,18 @@ import re
 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+async def transcribe_audio_file(file_obj, filename: str) -> tuple[str, str]:
+    """Transcribe a raw audio file directly using Groq Whisper."""
+    transcription = groq_client.audio.transcriptions.create(
+        file=(filename, file_obj),
+        model="whisper-large-v3-turbo",
+        response_format="text"
+    )
+    text = transcription
+    lang = detect_language(text)
+    return text, lang
+
+
 
 async def download_audio(video_url: str) -> str:
     """Download audio from a YouTube video. Uses user-agent to reduce bot detection."""

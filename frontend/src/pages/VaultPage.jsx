@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Masonry from 'react-masonry-css';
-import { listNotes, listTopics, deleteNote, createNote } from '../api';
+import { listNotes, listTopics, deleteNote, createNote, createAudioNote } from '../api';
 import ReactMarkdown from 'react-markdown';
 
 export default function VaultPage() {
@@ -15,6 +15,9 @@ export default function VaultPage() {
     const [newNoteContent, setNewNoteContent] = useState('');
     const [extractedTags, setExtractedTags] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -72,6 +75,63 @@ export default function VaultPage() {
             }
         }
         setExtractedTags(tags);
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = handleStopRecording;
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("Microphone access denied or error:", err);
+            alert("Could not access microphone. Please allow permissions.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            setIsRecording(false);
+        }
+    };
+
+    const handleStopRecording = async () => {
+        setIsSaving(true);
+        try {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.webm');
+            formData.append('title', newNoteTitle.trim());
+            formData.append('user_tags', JSON.stringify(extractedTags));
+
+            const newNote = await createAudioNote(formData);
+
+            setNotes([newNote, ...notes]);
+
+            setIsCreatingNote(false);
+            setNewNoteTitle('');
+            setNewNoteContent('');
+            setExtractedTags([]);
+        } catch (err) {
+            console.error("Failed to upload audio note:", err);
+            alert("Failed to save voice note. Please try again.");
+        } finally {
+            setIsSaving(false);
+            audioChunksRef.current = [];
+        }
     };
 
     const handleCreateNote = async () => {
@@ -263,42 +323,88 @@ export default function VaultPage() {
                             ))}
                         </div>
 
-                        <button
-                            onClick={handleCreateNote}
-                            disabled={isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())}
-                            style={{
-                                background: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())
-                                    ? 'var(--bg-secondary)'
-                                    : 'linear-gradient(135deg, #10B981, #059669)',
-                                color: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'var(--text-muted)' : '#fff',
-                                border: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? '1px solid var(--border-color)' : 'none',
-                                padding: '10px 24px',
-                                borderRadius: 10,
-                                fontWeight: 600,
-                                fontSize: 14,
-                                boxShadow: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
-                                cursor: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'not-allowed' : 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                transition: 'all 0.2s ease',
-                                transform: isSaving ? 'scale(0.98)' : 'scale(1)'
-                            }}
-                            onMouseOver={(e) => {
-                                if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
-                                    e.currentTarget.style.transform = 'translateY(-1px)';
-                                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.35)';
-                                }
-                            }}
-                            onMouseOut={(e) => {
-                                if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
-                                }
-                            }}
-                        >
-                            {isSaving ? "⏳ Saving..." : "💾 Save Note"}
-                        </button>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                            {isRecording ? (
+                                <button
+                                    onClick={stopRecording}
+                                    style={{
+                                        background: 'rgba(239, 68, 68, 0.1)',
+                                        color: '#ef4444',
+                                        border: '1px solid currentColor',
+                                        padding: '10px 20px',
+                                        borderRadius: 10,
+                                        fontWeight: 600,
+                                        fontSize: 14,
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        animation: 'pulse 1.5s infinite'
+                                    }}
+                                >
+                                    ⏹️ Stop Recording
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={startRecording}
+                                    disabled={isSaving}
+                                    style={{
+                                        background: 'transparent',
+                                        color: 'var(--text-primary)',
+                                        border: '1px solid var(--border-color)',
+                                        padding: '10px 20px',
+                                        borderRadius: 10,
+                                        fontWeight: 600,
+                                        fontSize: 14,
+                                        cursor: isSaving ? 'not-allowed' : 'pointer',
+                                        opacity: isSaving ? 0.5 : 1,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    🎤 Record Voice
+                                </button>
+                            )}
+
+                            <button
+                                onClick={handleCreateNote}
+                                disabled={isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())}
+                                style={{
+                                    background: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())
+                                        ? 'var(--bg-secondary)'
+                                        : 'linear-gradient(135deg, #10B981, #059669)',
+                                    color: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'var(--text-muted)' : '#fff',
+                                    border: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? '1px solid var(--border-color)' : 'none',
+                                    padding: '10px 24px',
+                                    borderRadius: 10,
+                                    fontWeight: 600,
+                                    fontSize: 14,
+                                    boxShadow: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                                    cursor: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    transition: 'all 0.2s ease',
+                                    transform: isSaving ? 'scale(0.98)' : 'scale(1)'
+                                }}
+                                onMouseOver={(e) => {
+                                    if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
+                                        e.currentTarget.style.transform = 'translateY(-1px)';
+                                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.35)';
+                                    }
+                                }}
+                                onMouseOut={(e) => {
+                                    if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
+                                        e.currentTarget.style.transform = 'translateY(0)';
+                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
+                                    }
+                                }}
+                            >
+                                {isSaving ? "⏳ Saving..." : "💾 Save Note"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
