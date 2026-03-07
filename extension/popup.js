@@ -18,7 +18,12 @@ async function loadCurrentTab() {
 
 async function checkAuthAndRoute() {
     showScreen("loading")
-    const result = await sendMessage({ type: "CHECK_AUTH" })
+    let result = await sendMessage({ type: "CHECK_AUTH" })
+    if (!result) {
+        // Worker was sleeping and just woke — retry after it initialises
+        await new Promise(r => setTimeout(r, 700))
+        result = await sendMessage({ type: "CHECK_AUTH" })
+    }
     if (result?.authenticated) {
         showMain(result.user)
     } else {
@@ -70,8 +75,15 @@ function setupLoginListeners() {
     const btnOpen = document.getElementById("btn-open-webapp")
     if (btnOpen) {
         btnOpen.addEventListener("click", async () => {
-            // Routed through background.js which has "tabs" permission
-            await sendMessage({ type: "OPEN_WEB_APP" })
+            const result = await sendMessage({ type: "OPEN_WEB_APP" })
+            if (!result) {
+                // Worker was sleeping — open tab directly from popup as fallback
+                await new Promise(r => setTimeout(r, 400))
+                const retry = await sendMessage({ type: "OPEN_WEB_APP" })
+                if (!retry) {
+                    chrome.tabs.create({ url: "https://mind-vault-ecru.vercel.app/login" })
+                }
+            }
         })
     }
 
@@ -83,12 +95,20 @@ function setupLoginListeners() {
             btnCheck.textContent = "Checking..."
             btnCheck.disabled = true
 
-            const result = await sendMessage({ type: "CHECK_AUTH" })
+            let result = await sendMessage({ type: "CHECK_AUTH" })
+            if (!result) {
+                // Worker waking up — give it time then retry
+                await new Promise(r => setTimeout(r, 700))
+                result = await sendMessage({ type: "CHECK_AUTH" })
+            }
 
             if (result?.authenticated) {
                 showMain(result.user)
             } else {
-                errorEl.textContent = "Still not signed in. Please sign in on the web app first."
+                const msg = !result
+                    ? "Extension restarting — please try again."
+                    : "Still not signed in. Please sign in on the web app first."
+                errorEl.textContent = msg
                 errorEl.classList.remove("hidden")
                 btnCheck.textContent = "↻ Refresh"
                 btnCheck.disabled = false
@@ -402,10 +422,12 @@ function showError(el, msg) {
 
 // ── MESSAGE HELPER ────────────────────────────────────
 function sendMessage(message) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         chrome.runtime.sendMessage(message, response => {
             if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError)
+                // Service worker was sleeping — resolve null so callers handle gracefully
+                console.warn("[MindVault]", chrome.runtime.lastError.message)
+                resolve(null)
             } else {
                 resolve(response)
             }
