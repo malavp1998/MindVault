@@ -107,7 +107,7 @@ async def initialize_memory_state(db: AsyncSession, note_id: uuid.UUID, user_id:
         INSERT INTO note_memory_state
         (id, note_id, user_id, stability, estimated_retention,
          next_review_date, interval_days, review_count, created_at, updated_at, avg_recall_score)
-        VALUES (gen_random_uuid(), :nid, :uid, 1.0, 1.0, NOW() + INTERVAL '1 day', 1, 0, NOW(), NOW(), 0.5)
+        VALUES (gen_random_uuid(), :nid, :uid, 1.0, 1.0, NOW(), 1, 0, NOW(), NOW(), 0.5)
         ON CONFLICT ON CONSTRAINT uq_note_user DO NOTHING
     """), {"nid": str(note_id), "uid": str(user_id)})
     await db.commit()
