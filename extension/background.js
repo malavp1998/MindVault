@@ -93,36 +93,22 @@ async function checkAuth() {
     const token = await getToken()
     if (!token) return { authenticated: false }
 
-    // First attempt with stored token
-    const result = await apiCall("/auth/me", {}, token)
-
+    const result = await apiCall("/auth/me")
     if (result.ok) {
-        await saveTokenAndUser(token, result.data)
         return { authenticated: true, user: result.data }
     }
 
-    // Token stale (401) — try to get a fresh one from open web app tab
-    if (result.status === 401) {
-        const freshToken = await tryRefreshTokenFromWebApp()
-
-        if (freshToken) {
-            const retryResult = await apiCall("/auth/me", {}, freshToken)
-            if (retryResult.ok) {
-                await saveTokenAndUser(freshToken, retryResult.data)
-                return { authenticated: true, user: retryResult.data }
-            }
-        }
-
-        // Truly expired — clear and ask user to re-login
-        await clearToken()
-        return { authenticated: false }
-    }
-
+    await clearToken()
     return { authenticated: false }
 }
 
 async function logout() {
     await clearToken()
+    return { success: true }
+}
+
+async function openWebApp() {
+    await chrome.tabs.create({ url: WEB_APP_URL + "/login" })
     return { success: true }
 }
 
@@ -183,6 +169,9 @@ async function handleMessage(message) {
 
         case "CHECK_AUTH":
             return await checkAuth()
+
+        case "OPEN_WEB_APP":
+            return await openWebApp()
 
         case "LOGOUT":
             return await logout()

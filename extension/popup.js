@@ -67,32 +67,30 @@ function showMain(user) {
 
 // ── EVENT LISTENERS ───────────────────────────────────
 function setupLoginListeners() {
-    // Open web app in new tab (use chrome.tabs.create, NOT an anchor href)
     const btnOpen = document.getElementById("btn-open-webapp")
     if (btnOpen) {
-        btnOpen.addEventListener("click", () => {
-            chrome.tabs.create({ url: "https://mind-vault-ecru.vercel.app/login" })
+        btnOpen.addEventListener("click", async () => {
+            // Routed through background.js which has "tabs" permission
+            await sendMessage({ type: "OPEN_WEB_APP" })
         })
     }
 
-    // Re-check auth after user has signed in on web app
     const btnCheck = document.getElementById("btn-check-login")
     if (btnCheck) {
         btnCheck.addEventListener("click", async () => {
-            btnCheck.textContent = "Checking..."
-            btnCheck.disabled = true
-
             const errorEl = document.getElementById("login-error")
             errorEl.classList.add("hidden")
+            btnCheck.textContent = "Checking..."
+            btnCheck.disabled = true
 
             const result = await sendMessage({ type: "CHECK_AUTH" })
 
             if (result?.authenticated) {
                 showMain(result.user)
             } else {
-                errorEl.textContent = "Not signed in yet. Please sign in on the web app first."
+                errorEl.textContent = "Still not signed in. Please sign in on the web app first."
                 errorEl.classList.remove("hidden")
-                btnCheck.textContent = "↻ I've signed in — Refresh"
+                btnCheck.textContent = "↻ Refresh"
                 btnCheck.disabled = false
             }
         })

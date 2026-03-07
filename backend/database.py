@@ -49,6 +49,9 @@ async def init_db():
         # Add graph coordinate columns if they don't exist (for existing DBs)
         await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_x FLOAT"))
         await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_y FLOAT"))
+        # firebase_uid migration for existing users table
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128)"))
+        await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_firebase_uid ON users(firebase_uid)"))
 
 
 async def get_db() -> AsyncSession:

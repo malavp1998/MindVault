@@ -18,16 +18,18 @@
                 <p>AI Second Brain</p>
             </div>
             <div class="form">
-                <div class="not-logged-in-msg">
-                    <p>You're not signed in.</p>
-                    <p>Open MindVault and sign in, then come back here.</p>
+                <div
+                    style="text-align:center; color:#6b6b80; font-size:13px; line-height:1.6; margin-bottom:16px; padding:12px; background:rgba(124,58,237,0.06); border-radius:10px; border:1px solid rgba(124,58,237,0.15);">
+                    <p style="margin-bottom:4px; font-weight:600; color:#1a1a2e;">Not signed in</p>
+                    <p>Sign in on the MindVault web app, then click Refresh below.</p>
                 </div>
                 <div id="login-error" class="error hidden"></div>
                 <button id="btn-open-webapp" class="btn btn-primary">
-                    Open MindVault to Sign In
+                    Open MindVault →
                 </button>
-                <button id="btn-check-login" class="btn btn-secondary" style="margin-top:8px;">
-                    ↻ I've signed in — Refresh
+                <button id="btn-check-login" class="btn"
+                    style="margin-top:8px; background:transparent; color:#7c3aed; border:1px solid rgba(124,58,237,0.35);">
+                    ↻ Refresh
                 </button>
             </div>
         </div>
