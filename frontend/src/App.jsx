@@ -17,7 +17,7 @@ function Sidebar() {
 
     const navItems = [
         { to: "/", end: true, icon: "📚", label: "Vault" },
-        { to: "/topics", icon: "🗺️", label: "Topics" },
+        { to: "/topics", icon: "🗺️", label: "Knowledge Graph" },
         { to: "/search", icon: "🔍", label: "Search" },
         { to: "/chat", icon: "💬", label: "Chat" },
     ];
