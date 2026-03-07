@@ -16,8 +16,10 @@ export default function VaultPage() {
     const [extractedTags, setExtractedTags] = useState([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
+    const [interimTranscript, setInterimTranscript] = useState('');
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const recognitionRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -92,6 +94,42 @@ export default function VaultPage() {
 
             mediaRecorder.onstop = handleStopRecording;
 
+            // Initialize Speech Recognition
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = selectedLanguage === 'All' ? 'en-US' : selectedLanguage; // Default to English or selected language
+
+                recognition.onresult = (event) => {
+                    let interimResult = '';
+                    let finalResult = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalResult += event.results[i][0].transcript + ' ';
+                        } else {
+                            interimResult += event.results[i][0].transcript;
+                        }
+                    }
+
+                    if (finalResult) {
+                        setNewNoteContent(prev => prev + (prev.endsWith(' ') || prev.length === 0 ? '' : ' ') + finalResult);
+                    }
+                    setInterimTranscript(interimResult);
+                };
+
+                recognition.onerror = (event) => {
+                    console.error("Speech recognition error", event.error);
+                };
+
+                recognitionRef.current = recognition;
+                recognition.start();
+            } else {
+                console.warn("Speech recognition not supported in this browser.");
+            }
+
             mediaRecorder.start();
             setIsRecording(true);
         } catch (err) {
@@ -105,6 +143,10 @@ export default function VaultPage() {
             mediaRecorderRef.current.stop();
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
             setIsRecording(false);
+        }
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            setInterimTranscript('');
         }
     };
 
@@ -123,14 +165,15 @@ export default function VaultPage() {
 
             setIsCreatingNote(false);
             setNewNoteTitle('');
-            setNewNoteContent('');
             setExtractedTags([]);
+            setInterimTranscript('');
         } catch (err) {
             console.error("Failed to upload audio note:", err);
             alert("Failed to save voice note. Please try again.");
         } finally {
             setIsSaving(false);
             audioChunksRef.current = [];
+            setInterimTranscript('');
         }
     };
 
@@ -295,7 +338,7 @@ export default function VaultPage() {
                     />
                     <textarea
                         placeholder="Write your note here... Use #hashtags to automatically tag it!"
-                        value={newNoteContent}
+                        value={newNoteContent + (interimTranscript ? (newNoteContent.endsWith(' ') || newNoteContent.length === 0 ? '' : ' ') + interimTranscript : '')}
                         onChange={handleContentChange}
                         style={{
                             width: '100%',
@@ -305,7 +348,7 @@ export default function VaultPage() {
                             minHeight: 120,
                             padding: 16,
                             fontSize: 14,
-                            color: 'var(--text-primary)',
+                            color: interimTranscript ? 'var(--text-muted)' : 'var(--text-primary)',
                             resize: 'vertical',
                             outline: 'none',
                             fontFamily: 'Inter, sans-serif'
