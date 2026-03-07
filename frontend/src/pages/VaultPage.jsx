@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Masonry from 'react-masonry-css';
-import { listNotes, listTopics, deleteNote } from '../api';
+import { listNotes, listTopics, deleteNote, createNote } from '../api';
 import ReactMarkdown from 'react-markdown';
 
 export default function VaultPage() {
@@ -10,6 +10,11 @@ export default function VaultPage() {
     const [selectedTopic, setSelectedTopic] = useState(null);
     const [selectedLanguage, setSelectedLanguage] = useState('All');
     const [loading, setLoading] = useState(true);
+    const [isCreatingNote, setIsCreatingNote] = useState(false);
+    const [newNoteTitle, setNewNoteTitle] = useState('');
+    const [newNoteContent, setNewNoteContent] = useState('');
+    const [extractedTags, setExtractedTags] = useState([]);
+    const [isSaving, setIsSaving] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -52,6 +57,50 @@ export default function VaultPage() {
             alert("Failed to delete note.");
         }
     }
+
+    const handleContentChange = (e) => {
+        const text = e.target.value;
+        setNewNoteContent(text);
+
+        // Extract hashtags regex (matches #tag but not # just standing alone)
+        const hashtagRegex = /#([a-zA-Z0-9_]+)/g;
+        const tags = [];
+        let match;
+        while ((match = hashtagRegex.exec(text)) !== null) {
+            if (!tags.includes(match[1].toLowerCase())) {
+                tags.push(match[1].toLowerCase());
+            }
+        }
+        setExtractedTags(tags);
+    };
+
+    const handleCreateNote = async () => {
+        if (!newNoteContent.trim() && !newNoteTitle.trim()) return;
+
+        setIsSaving(true);
+        try {
+            const newNote = await createNote({
+                title: newNoteTitle.trim() || "Untitled Note",
+                content: newNoteContent.trim(),
+                user_tags: extractedTags,
+                source_url: "MindVault Web"
+            });
+
+            // Add new note to the top of the local state array
+            setNotes([newNote, ...notes]);
+
+            // Reset form UI
+            setIsCreatingNote(false);
+            setNewNoteTitle('');
+            setNewNoteContent('');
+            setExtractedTags([]);
+        } catch (err) {
+            console.error("Failed to create note:", err);
+            alert("Failed to save note. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -117,7 +166,109 @@ export default function VaultPage() {
                         ))}
                     </div>
                 )}
+
+                <button
+                    onClick={() => setIsCreatingNote(!isCreatingNote)}
+                    style={{
+                        marginLeft: 'auto',
+                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'var(--accent-color)',
+                        color: isCreatingNote ? '#ef4444' : '#fff',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.2s ease'
+                    }}
+                >
+                    {isCreatingNote ? "✕ Cancel" : "➕ Create Note"}
+                </button>
             </div>
+
+            {/* Create Note Inline Form */}
+            {isCreatingNote && (
+                <div style={{
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 16,
+                    padding: 20,
+                    marginBottom: 24,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+                    animation: 'fadeInUp 0.3s ease'
+                }}>
+                    <input
+                        type="text"
+                        placeholder="Note Title (Optional)"
+                        value={newNoteTitle}
+                        onChange={e => setNewNoteTitle(e.target.value)}
+                        style={{
+                            width: '100%',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            fontSize: 18,
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            padding: '8px 0',
+                            marginBottom: 16,
+                            outline: 'none'
+                        }}
+                    />
+                    <textarea
+                        placeholder="Write your note here... Use #hashtags to automatically tag it!"
+                        value={newNoteContent}
+                        onChange={handleContentChange}
+                        style={{
+                            width: '100%',
+                            background: 'var(--bg-primary)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 12,
+                            minHeight: 120,
+                            padding: 16,
+                            fontSize: 14,
+                            color: 'var(--text-primary)',
+                            resize: 'vertical',
+                            outline: 'none',
+                            fontFamily: 'Inter, sans-serif'
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = 'var(--accent-color)'}
+                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {extractedTags.map(tag => (
+                                <span key={tag} className="tag" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+                                    🏷️ {tag}
+                                </span>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={handleCreateNote}
+                            disabled={isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())}
+                            style={{
+                                background: 'var(--accent-color)',
+                                color: '#fff',
+                                border: 'none',
+                                padding: '10px 20px',
+                                borderRadius: 10,
+                                fontWeight: 600,
+                                cursor: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'not-allowed' : 'pointer',
+                                opacity: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 0.6 : 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8
+                            }}
+                        >
+                            {isSaving ? "Saving..." : "💾 Save Note"}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {
                 notes.length === 0 ? (
