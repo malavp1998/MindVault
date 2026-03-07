@@ -1,39 +1,14 @@
-import axios from 'axios';
+import axios from "axios";
+import { auth } from "./firebase";
 
-export const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
-    timeout: 120000,
-});
+const API_URL = import.meta.env.VITE_API_URL || "";
+export const api = axios.create({ baseURL: `${API_URL}/api` });
 
-// Attach JWT token to every request automatically
-api.interceptors.request.use(config => {
-    const token = localStorage.getItem('mv_token');
-    if (token) {
+api.interceptors.request.use(async (config) => {
+    if (auth.currentUser) {
+        const token = await auth.currentUser.getIdToken();
         config.headers.Authorization = `Bearer ${token}`;
     }
-    return config;
-});
-
-// Redirect to login if token expired (401)
-api.interceptors.response.use(
-    response => response,
-    error => {
-        if (error.response?.status === 401) {
-            localStorage.removeItem('mv_token');
-            window.location.href = '/login';
-        }
-        return Promise.reject(error);
-    }
-);
-
-// Auth API (separate from /api prefix)
-export const authApi = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '',
-    timeout: 30000,
-});
-authApi.interceptors.request.use(config => {
-    const token = localStorage.getItem('mv_token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
 

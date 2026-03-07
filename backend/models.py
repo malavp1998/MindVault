@@ -28,6 +28,9 @@ class User(Base):
     hashed_password: Mapped[Optional[str]] = mapped_column(
         VARCHAR(255), nullable=True
     )
+    firebase_uid: Mapped[Optional[str]] = mapped_column(
+        VARCHAR(128), unique=True, nullable=True, index=True
+    )
     phone_number: Mapped[Optional[str]] = mapped_column(
         VARCHAR(15), unique=True, nullable=True
     )

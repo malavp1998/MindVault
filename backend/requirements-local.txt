@@ -16,3 +16,4 @@ langchain
 langdetect
 groq
 yt-dlp
+firebase-admin>=6.5.0

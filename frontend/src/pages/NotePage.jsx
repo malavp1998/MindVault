@@ -165,7 +165,7 @@ export default function NotePage() {
                         onClick={handleReprocess}
                         disabled={processing}
                         style={{
-                            background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)',
+                            background: 'var(--bg-card-hover)', border: '1px solid var(--border)',
                             color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: 6,
                             fontSize: 12, cursor: 'pointer',
                         }}

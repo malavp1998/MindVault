@@ -120,7 +120,7 @@ export default function TopicsPage() {
     return (
         <div style={{ display: "flex", height: "calc(100vh - 0px)", position: "relative" }}>
             {/* ──────────────── Graph Canvas ──────────────── */}
-            <div style={{ flex: 1, position: "relative", background: "#030712" }}>
+            <div style={{ flex: 1, position: "relative", background: "var(--bg-primary)" }}>
 
                 {/* Top-left controls */}
                 <div style={{
@@ -133,20 +133,20 @@ export default function TopicsPage() {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="🔍 Search nodes…"
                         style={{
-                            background: "rgba(17,24,39,0.95)", border: "1px solid #374151",
-                            borderRadius: 10, padding: "8px 14px", color: "#fff",
+                            background: "rgba(255,255,255,0.95)", border: "1px solid var(--border)",
+                            borderRadius: 10, padding: "8px 14px", color: "var(--text-primary)",
                             fontSize: 13, outline: "none", width: 200,
                             backdropFilter: "blur(8px)",
                         }}
                         onFocus={(e) => (e.target.style.borderColor = "#7C3AED")}
-                        onBlur={(e) => (e.target.style.borderColor = "#374151")}
+                        onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
                     />
                     <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
                         style={{
-                            background: "rgba(17,24,39,0.95)", border: "1px solid #374151",
-                            borderRadius: 10, padding: "8px 12px", color: "#E5E7EB",
+                            background: "rgba(255,255,255,0.95)", border: "1px solid var(--border)",
+                            borderRadius: 10, padding: "8px 12px", color: "var(--text-primary)",
                             fontSize: 13, cursor: "pointer",
                         }}
                     >
@@ -171,28 +171,28 @@ export default function TopicsPage() {
                 {/* Stats badge */}
                 <div style={{
                     position: "absolute", top: 16, right: sidePanel ? 324 : 16, zIndex: 20,
-                    background: "rgba(17,24,39,0.9)", border: "1px solid #1F2937",
-                    borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "#6B7280",
+                    background: "rgba(255,255,255,0.9)", border: "1px solid var(--border)",
+                    borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "var(--text-muted)",
                     backdropFilter: "blur(8px)",
                 }}>
                     <span style={{ color: "#A78BFA", fontWeight: 600 }}>{topicCount}</span> topics &nbsp;·&nbsp;
-                    <span style={{ color: "#9CA3AF", fontWeight: 600 }}>{noteCount}</span> notes
+                    <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{noteCount}</span> notes
                 </div>
 
                 {/* Edge type toggles */}
                 <div style={{
                     position: "absolute", bottom: 16, left: 16, zIndex: 20,
-                    background: "rgba(17,24,39,0.92)", border: "1px solid #1F2937",
-                    borderRadius: 12, padding: "14px 16px", fontSize: 12, color: "#6B7280",
+                    background: "rgba(255,255,255,0.92)", border: "1px solid var(--border)",
+                    borderRadius: 12, padding: "14px 16px", fontSize: 12, color: "var(--text-muted)",
                     display: "flex", flexDirection: "column", gap: 10,
                     backdropFilter: "blur(8px)", minWidth: 200,
                 }}>
-                    <div style={{ color: "#9CA3AF", fontWeight: 600, marginBottom: 2 }}>Edge Types</div>
+                    <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 2 }}>Edge Types</div>
 
                     {[
                         { key: "topic_link", color: "#7C3AED", label: "Topic clusters" },
                         { key: "semantic_link", color: "#3B82F6", label: "Semantic similarity" },
-                        { key: "tag_link", color: "#374151", label: "Shared tags" },
+                        { key: "tag_link", color: "var(--border)", label: "Shared tags" },
                         { key: "backlink", color: "#10B981", label: "Backlinks" },
                     ].map(({ key, color, label }) => (
                         <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
@@ -207,8 +207,8 @@ export default function TopicsPage() {
                         </label>
                     ))}
 
-                    <div style={{ borderTop: "1px solid #1F2937", paddingTop: 8, marginTop: 2 }}>
-                        <div style={{ color: "#9CA3AF", fontWeight: 600, marginBottom: 6 }}>
+                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
+                        <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>
                             Semantic threshold: {semanticThreshold}%
                         </div>
                         <input
@@ -218,15 +218,15 @@ export default function TopicsPage() {
                         />
                     </div>
 
-                    <div style={{ borderTop: "1px solid #1F2937", paddingTop: 8, marginTop: 2 }}>
-                        <div style={{ color: "#9CA3AF", fontWeight: 600, marginBottom: 6 }}>Local graph depth</div>
+                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
+                        <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>Local graph depth</div>
                         <div style={{ display: "flex", gap: 6 }}>
                             {[1, 2, 3].map(d => (
                                 <button key={d} onClick={() => setLocalDepth(d)} style={{
                                     padding: "4px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer",
                                     background: localDepth === d ? "rgba(124,58,237,0.3)" : "transparent",
-                                    border: `1px solid ${localDepth === d ? "rgba(124,58,237,0.6)" : "#374151"}`,
-                                    color: localDepth === d ? "#A78BFA" : "#6B7280",
+                                    border: `1px solid ${localDepth === d ? "rgba(124,58,237,0.6)" : "var(--border)"}`,
+                                    color: localDepth === d ? "#A78BFA" : "var(--text-muted)",
                                 }}>
                                     {d}
                                 </button>
@@ -234,7 +234,7 @@ export default function TopicsPage() {
                         </div>
                     </div>
 
-                    <div style={{ borderTop: "1px solid #1F2937", paddingTop: 6, marginTop: 2, fontSize: 11, color: "#4B5563" }}>
+                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, marginTop: 2, fontSize: 11, color: "var(--text-muted)" }}>
                         Hover → highlight · Click → local graph · Right-click → open note
                     </div>
                 </div>
@@ -244,10 +244,10 @@ export default function TopicsPage() {
                     <div style={{
                         position: "absolute", inset: 0, display: "flex",
                         flexDirection: "column", alignItems: "center", justifyContent: "center",
-                        color: "#6B7280", zIndex: 10,
+                        color: "var(--text-muted)", zIndex: 10,
                     }}>
                         <div style={{ fontSize: 48, marginBottom: 16 }}>🌌</div>
-                        <p style={{ fontSize: 18, fontWeight: 600, color: "#9CA3AF" }}>
+                        <p style={{ fontSize: 18, fontWeight: 600, color: "var(--text-secondary)" }}>
                             {searchQuery ? "No matching nodes" : "No clusters yet"}
                         </p>
                         <p style={{ fontSize: 13, marginTop: 8 }}>
@@ -282,13 +282,13 @@ export default function TopicsPage() {
             {/* ──────────────── Side Panel ──────────────── */}
             {sidePanel && (
                 <div style={{
-                    width: 320, background: "#0F1117", borderLeft: "1px solid #1F2937",
+                    width: 320, background: "var(--bg-secondary)", borderLeft: "1px solid var(--border)",
                     display: "flex", flexDirection: "column", overflow: "hidden",
                     animation: "slideIn 0.2s ease",
                 }}>
                     {/* Panel header */}
                     <div style={{
-                        padding: "16px 20px", borderBottom: "1px solid #1F2937",
+                        padding: "16px 20px", borderBottom: "1px solid var(--border)",
                         display: "flex", justifyContent: "space-between", alignItems: "flex-start",
                     }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -296,7 +296,7 @@ export default function TopicsPage() {
                                 display: "inline-block", marginBottom: 8, padding: "2px 10px",
                                 borderRadius: 20, fontSize: 11, fontWeight: 600,
                                 background: sidePanel.type === "topic" ? "rgba(124,58,237,0.2)" : "rgba(75,85,99,0.3)",
-                                color: sidePanel.type === "topic" ? "#A78BFA" : "#9CA3AF",
+                                color: sidePanel.type === "topic" ? "#A78BFA" : "var(--text-secondary)",
                                 border: `1px solid ${sidePanel.type === "topic" ? "rgba(124,58,237,0.4)" : "rgba(75,85,99,0.4)"}`,
                                 textTransform: "uppercase", letterSpacing: "0.05em",
                             }}>
@@ -304,7 +304,7 @@ export default function TopicsPage() {
                             </span>
                             <h2 style={{
                                 margin: 0, fontSize: 15, fontWeight: 700,
-                                color: "#F9FAFB", lineHeight: 1.3,
+                                color: "var(--text-primary)", lineHeight: 1.3,
                                 overflow: "hidden", textOverflow: "ellipsis",
                                 display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
                             }}>
@@ -314,12 +314,12 @@ export default function TopicsPage() {
                         <button
                             onClick={() => { setSidePanel(null); setSelectedNode(null); }}
                             style={{
-                                background: "none", border: "none", color: "#6B7280",
+                                background: "none", border: "none", color: "var(--text-muted)",
                                 fontSize: 20, cursor: "pointer", padding: "0 0 0 12px",
                                 lineHeight: 1, flexShrink: 0,
                             }}
-                            onMouseOver={(e) => (e.currentTarget.style.color = "#fff")}
-                            onMouseOut={(e) => (e.currentTarget.style.color = "#6B7280")}
+                            onMouseOver={(e) => (e.currentTarget.style.color = "var(--text-primary)")}
+                            onMouseOut={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
                         >×</button>
                     </div>
 
@@ -353,7 +353,7 @@ function TopicPanel({ data, navigate }) {
     const notes = data?.notes || [];
     return (
         <div>
-            <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
                 {notes.length} note{notes.length !== 1 ? "s" : ""} in this cluster
             </p>
             {notes.map((note) => (
@@ -361,25 +361,25 @@ function TopicPanel({ data, navigate }) {
                     key={note.id}
                     onClick={() => navigate(`/note/${note.id}`)}
                     style={{
-                        background: "#1A1D27", borderRadius: 10, padding: "12px 14px",
-                        marginBottom: 10, cursor: "pointer", border: "1px solid #1F2937",
+                        background: "var(--bg-card)", borderRadius: 10, padding: "12px 14px",
+                        marginBottom: 10, cursor: "pointer", border: "1px solid var(--border)",
                         transition: "all 0.15s",
                     }}
                     onMouseOver={(e) => {
-                        e.currentTarget.style.background = "#232636";
+                        e.currentTarget.style.background = "var(--bg-card-hover)";
                         e.currentTarget.style.borderColor = "rgba(124,58,237,0.3)";
                     }}
                     onMouseOut={(e) => {
-                        e.currentTarget.style.background = "#1A1D27";
-                        e.currentTarget.style.borderColor = "#1F2937";
+                        e.currentTarget.style.background = "var(--bg-card)";
+                        e.currentTarget.style.borderColor = "var(--border)";
                     }}
                 >
-                    <p style={{ fontSize: 13, fontWeight: 600, color: "#E5E7EB", margin: "0 0 6px 0" }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px 0" }}>
                         {note.title || "Untitled"}
                     </p>
                     {note.summary && (
                         <p style={{
-                            fontSize: 12, color: "#6B7280", margin: "0 0 8px 0",
+                            fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px 0",
                             overflow: "hidden", display: "-webkit-box",
                             WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                         }}>
@@ -399,10 +399,10 @@ function NotePanel({ note, navigate }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {note.summary && (
                 <div>
-                    <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                         AI Summary
                     </p>
-                    <p style={{ fontSize: 13, color: "#D1D5DB", lineHeight: 1.6, margin: 0 }}>
+                    <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
                         {note.summary}
                     </p>
                 </div>
@@ -426,7 +426,7 @@ function NotePanel({ note, navigate }) {
 
             {Array.isArray(note.auto_tags) && note.auto_tags.length > 0 && (
                 <div>
-                    <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                         ✨ AI Tags
                     </p>
                     <TagRow tags={note.auto_tags} color="#60A5FA" bg="rgba(59,130,246,0.12)" border="rgba(59,130,246,0.25)" />
@@ -435,7 +435,7 @@ function NotePanel({ note, navigate }) {
 
             {Array.isArray(note.user_tags) && note.user_tags.length > 0 && (
                 <div>
-                    <p style={{ fontSize: 11, color: "#6B7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                         🏷️ Your Tags
                     </p>
                     <TagRow tags={note.user_tags} color="#34D399" bg="rgba(16,185,129,0.12)" border="rgba(16,185,129,0.25)" />
@@ -446,7 +446,7 @@ function NotePanel({ note, navigate }) {
                 onClick={() => navigate(`/note/${note.id}`)}
                 style={{
                     background: "linear-gradient(135deg, #6366F1, #8B5CF6)",
-                    color: "#fff", border: "none", borderRadius: 10,
+                    color: "var(--text-primary)", border: "none", borderRadius: 10,
                     padding: "10px 16px", fontSize: 14, fontWeight: 600,
                     cursor: "pointer", width: "100%",
                 }}
@@ -460,7 +460,7 @@ function NotePanel({ note, navigate }) {
 }
 
 // ─── Shared Tag Row ─────────────────────────────────────────────────
-function TagRow({ tags, color = "#9CA3AF", bg = "rgba(75,85,99,0.2)", border = "transparent" }) {
+function TagRow({ tags, color = "var(--text-secondary)", bg = "rgba(75,85,99,0.2)", border = "transparent" }) {
     if (!Array.isArray(tags) || tags.length === 0) return null;
     return (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>

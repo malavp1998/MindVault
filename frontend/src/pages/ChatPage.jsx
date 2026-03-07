@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import api from "../api"
+import { api } from "../api"
 
 const FALLBACK_SUGGESTIONS = [
     "What have I saved recently?",
@@ -147,8 +147,8 @@ export default function ChatPage() {
         <div style={{
             display: "flex",
             height: "calc(100vh - 0px)",
-            background: "#0a0a0f",
-            color: "#fff",
+            background: "var(--bg-primary)",
+            color: "var(--text-primary)",
             marginLeft: "-2rem",
             marginTop: "-2rem",
             width: "calc(100% + 4rem)",
@@ -158,14 +158,14 @@ export default function ChatPage() {
             <div style={{
                 width: sidebarOpen ? "260px" : "0px",
                 minWidth: sidebarOpen ? "260px" : "0px",
-                background: "#111118",
-                borderRight: "1px solid #1e1e2e",
+                background: "var(--bg-secondary)",
+                borderRight: "1px solid var(--border)",
                 display: "flex",
                 flexDirection: "column",
                 transition: "all 0.2s ease",
                 overflow: "hidden",
             }}>
-                <div style={{ padding: "16px", borderBottom: "1px solid #1e1e2e" }}>
+                <div style={{ padding: "16px", borderBottom: "1px solid var(--border)" }}>
                     <button onClick={startNewSession} style={{
                         width: "100%",
                         background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
@@ -187,7 +187,7 @@ export default function ChatPage() {
                 <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
                     {sessions.length === 0 && (
                         <p style={{
-                            color: "#444",
+                            color: "var(--border-hover)",
                             fontSize: "11px",
                             textAlign: "center",
                             marginTop: "32px",
@@ -206,11 +206,11 @@ export default function ChatPage() {
                                 borderRadius: "8px",
                                 cursor: "pointer",
                                 marginBottom: "2px",
-                                background: activeSession === s.id ? "#1e1e2e" : "transparent",
+                                background: activeSession === s.id ? "var(--bg-card-hover)" : "transparent",
                                 transition: "background 0.15s",
                             }}
                             onMouseEnter={e => {
-                                if (activeSession !== s.id) e.currentTarget.style.background = "#16161e"
+                                if (activeSession !== s.id) e.currentTarget.style.background = "var(--bg-card-hover)"
                             }}
                             onMouseLeave={e => {
                                 if (activeSession !== s.id) e.currentTarget.style.background = "transparent"
@@ -220,7 +220,7 @@ export default function ChatPage() {
                                 <p style={{
                                     fontSize: "12px",
                                     fontWeight: 500,
-                                    color: activeSession === s.id ? "#fff" : "#999",
+                                    color: activeSession === s.id ? "var(--text-primary)" : "var(--text-secondary)",
                                     whiteSpace: "nowrap",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
@@ -228,7 +228,7 @@ export default function ChatPage() {
                                 }}>{s.title || "New Chat"}</p>
                                 <p style={{
                                     fontSize: "10px",
-                                    color: "#555",
+                                    color: "var(--text-muted)",
                                     margin: "2px 0 0 0",
                                 }}>{s.message_count || 0} messages</p>
                             </div>
@@ -237,7 +237,7 @@ export default function ChatPage() {
                                 style={{
                                     background: "none",
                                     border: "none",
-                                    color: "#555",
+                                    color: "var(--text-muted)",
                                     cursor: "pointer",
                                     fontSize: "14px",
                                     padding: "2px 4px",
@@ -245,7 +245,7 @@ export default function ChatPage() {
                                     transition: "opacity 0.15s",
                                 }}
                                 onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = "#ef4444" }}
-                                onMouseLeave={e => { e.currentTarget.style.opacity = 0; e.currentTarget.style.color = "#555" }}
+                                onMouseLeave={e => { e.currentTarget.style.opacity = 0; e.currentTarget.style.color = "var(--text-muted)" }}
                             >×</button>
                         </div>
                     ))}
@@ -258,8 +258,8 @@ export default function ChatPage() {
                 {/* Header */}
                 <div style={{
                     padding: "14px 24px",
-                    borderBottom: "1px solid #1e1e2e",
-                    background: "#111118",
+                    borderBottom: "1px solid var(--border)",
+                    background: "var(--bg-secondary)",
                     display: "flex",
                     alignItems: "center",
                     gap: "12px",
@@ -268,17 +268,17 @@ export default function ChatPage() {
                         onClick={() => setSidebarOpen(p => !p)}
                         style={{
                             background: "none", border: "none",
-                            color: "#888", cursor: "pointer", fontSize: "18px",
+                            color: "var(--text-secondary)", cursor: "pointer", fontSize: "18px",
                         }}
                     >{sidebarOpen ? "◀" : "▶"}</button>
                     <span style={{ fontSize: "20px" }}>🧠</span>
                     <div>
                         <h1 style={{
                             fontSize: "14px", fontWeight: 600,
-                            color: "#fff", margin: 0,
+                            color: "var(--text-primary)", margin: 0,
                         }}>Chat with your Vault</h1>
                         <p style={{
-                            fontSize: "11px", color: "#666", margin: 0,
+                            fontSize: "11px", color: "var(--text-muted)", margin: 0,
                         }}>Ask anything — answers grounded in your notes</p>
                     </div>
                 </div>
@@ -303,10 +303,10 @@ export default function ChatPage() {
                             <div style={{ fontSize: "48px", marginBottom: "16px" }}>🧠</div>
                             <h2 style={{
                                 fontSize: "18px", fontWeight: 600,
-                                color: "#fff", marginBottom: "8px",
+                                color: "var(--text-primary)", marginBottom: "8px",
                             }}>Chat with your Knowledge Vault</h2>
                             <p style={{
-                                fontSize: "13px", color: "#666",
+                                fontSize: "13px", color: "var(--text-muted)",
                                 maxWidth: "400px", marginBottom: "32px",
                             }}>
                                 Ask questions about anything you've saved.
@@ -324,8 +324,8 @@ export default function ChatPage() {
                                 }}>
                                     {[1, 2, 3, 4].map(i => (
                                         <div key={i} style={{
-                                            background: "#16161e",
-                                            border: "1px solid #1e1e2e",
+                                            background: "var(--bg-card-hover)",
+                                            border: "1px solid var(--border)",
                                             borderRadius: "12px",
                                             height: "44px",
                                             animation: "pulse 1.5s ease-in-out infinite",
@@ -345,23 +345,23 @@ export default function ChatPage() {
                                             key={i}
                                             onClick={() => { setInput(s); inputRef.current?.focus() }}
                                             style={{
-                                                background: "#16161e",
-                                                border: "1px solid #1e1e2e",
+                                                background: "var(--bg-card-hover)",
+                                                border: "1px solid var(--border)",
                                                 borderRadius: "12px",
                                                 padding: "12px 14px",
                                                 textAlign: "left",
-                                                color: "#aaa",
+                                                color: "var(--text-secondary)",
                                                 fontSize: "12px",
                                                 cursor: "pointer",
                                                 transition: "all 0.15s",
                                             }}
                                             onMouseEnter={e => {
                                                 e.currentTarget.style.borderColor = "#7c3aed"
-                                                e.currentTarget.style.color = "#ddd"
+                                                e.currentTarget.style.color = "var(--text-primary)"
                                             }}
                                             onMouseLeave={e => {
-                                                e.currentTarget.style.borderColor = "#1e1e2e"
-                                                e.currentTarget.style.color = "#aaa"
+                                                e.currentTarget.style.borderColor = "var(--border)"
+                                                e.currentTarget.style.color = "var(--text-secondary)"
                                             }}
                                         >{s}</button>
                                     ))}
@@ -376,14 +376,14 @@ export default function ChatPage() {
                                     marginTop: "16px",
                                     background: "none",
                                     border: "none",
-                                    color: "#555",
+                                    color: "var(--text-muted)",
                                     fontSize: "11px",
                                     cursor: suggestionsLoading ? "not-allowed" : "pointer",
                                     opacity: suggestionsLoading ? 0.4 : 1,
                                     transition: "color 0.15s",
                                 }}
-                                onMouseEnter={e => { if (!suggestionsLoading) e.currentTarget.style.color = "#999" }}
-                                onMouseLeave={e => e.currentTarget.style.color = "#555"}
+                                onMouseEnter={e => { if (!suggestionsLoading) e.currentTarget.style.color = "var(--text-secondary)" }}
+                                onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
                             >↻ Refresh suggestions</button>
                         </div>
                     )}
@@ -420,7 +420,7 @@ export default function ChatPage() {
                                 flexShrink: 0,
                             }}>🧠</div>
                             <div style={{
-                                background: "#16161e",
+                                background: "var(--bg-card-hover)",
                                 borderRadius: "16px 16px 16px 4px",
                                 padding: "12px 16px",
                                 display: "flex", gap: "4px",
@@ -429,7 +429,7 @@ export default function ChatPage() {
                                 {[0, 150, 300].map(d => (
                                     <span key={d} style={{
                                         width: "6px", height: "6px",
-                                        background: "#555",
+                                        background: "var(--text-muted)",
                                         borderRadius: "50%",
                                         animation: "bounce 1.4s infinite",
                                         animationDelay: `${d}ms`,
@@ -445,8 +445,8 @@ export default function ChatPage() {
                 {/* Input */}
                 <div style={{
                     padding: "16px 24px",
-                    borderTop: "1px solid #1e1e2e",
-                    background: "#111118",
+                    borderTop: "1px solid var(--border)",
+                    background: "var(--bg-secondary)",
                 }}>
                     <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
                         <textarea
@@ -463,11 +463,11 @@ export default function ChatPage() {
                             rows={1}
                             style={{
                                 flex: 1,
-                                background: "#16161e",
-                                border: "1px solid #1e1e2e",
+                                background: "var(--bg-card-hover)",
+                                border: "1px solid var(--border)",
                                 borderRadius: "12px",
                                 padding: "12px 16px",
-                                color: "#fff",
+                                color: "var(--text-primary)",
                                 fontSize: "13px",
                                 resize: "none",
                                 outline: "none",
@@ -476,14 +476,14 @@ export default function ChatPage() {
                                 fontFamily: "inherit",
                             }}
                             onFocus={e => e.target.style.borderColor = "#7c3aed"}
-                            onBlur={e => e.target.style.borderColor = "#1e1e2e"}
+                            onBlur={e => e.target.style.borderColor = "var(--border)"}
                         />
                         <button
                             onClick={sendMessage}
                             disabled={loading || !input.trim()}
                             style={{
                                 background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-                                color: "#fff",
+                                color: "var(--text-primary)",
                                 border: "none",
                                 borderRadius: "12px",
                                 padding: "12px 16px",
@@ -496,7 +496,7 @@ export default function ChatPage() {
                         >↑</button>
                     </div>
                     <p style={{
-                        fontSize: "10px", color: "#444",
+                        fontSize: "10px", color: "var(--border-hover)",
                         textAlign: "center", margin: "8px 0 0 0",
                     }}>Shift+Enter for new line · Enter to send</p>
                 </div>
@@ -517,7 +517,6 @@ export default function ChatPage() {
     )
 }
 
-
 function MessageBubble({ message }) {
     const isUser = message.role === "user"
     const citedNotes = message.cited_notes?.filter(Boolean) || []
@@ -536,7 +535,7 @@ function MessageBubble({ message }) {
                 justifyContent: "center", fontSize: "14px",
                 flexShrink: 0,
                 background: isUser
-                    ? "#1e1e2e"
+                    ? "var(--border)"
                     : "linear-gradient(135deg, #7c3aed, #6d28d9)",
             }}>
                 {isUser ? "👤" : "🧠"}
@@ -556,8 +555,8 @@ function MessageBubble({ message }) {
                     fontSize: "13px",
                     lineHeight: 1.6,
                     whiteSpace: "pre-wrap",
-                    background: isUser ? "#7c3aed" : "#16161e",
-                    color: isUser ? "#fff" : "#ddd",
+                    background: isUser ? "#7c3aed" : "var(--bg-card-hover)",
+                    color: isUser ? "var(--text-primary)" : "var(--text-primary)",
                 }}>
                     {message.content}
                 </div>
@@ -566,7 +565,7 @@ function MessageBubble({ message }) {
                 {!isUser && citedNotes.length > 0 && (
                     <div>
                         <p style={{
-                            fontSize: "10px", color: "#555",
+                            fontSize: "10px", color: "var(--text-muted)",
                             margin: "0 0 4px 4px",
                         }}>Sources from your vault:</p>
                         <div style={{
@@ -579,12 +578,12 @@ function MessageBubble({ message }) {
                                     key={note.id}
                                     href={`/note/${note.id}`}
                                     style={{
-                                        background: "#0d0d14",
-                                        border: "1px solid #1e1e2e",
+                                        background: "var(--bg-card)",
+                                        border: "1px solid var(--border)",
                                         borderRadius: "8px",
                                         padding: "5px 10px",
                                         fontSize: "11px",
-                                        color: "#888",
+                                        color: "var(--text-secondary)",
                                         textDecoration: "none",
                                         display: "flex",
                                         alignItems: "center",
@@ -596,8 +595,8 @@ function MessageBubble({ message }) {
                                         e.currentTarget.style.color = "#c4b5fd"
                                     }}
                                     onMouseLeave={e => {
-                                        e.currentTarget.style.borderColor = "#1e1e2e"
-                                        e.currentTarget.style.color = "#888"
+                                        e.currentTarget.style.borderColor = "var(--border)"
+                                        e.currentTarget.style.color = "var(--text-secondary)"
                                     }}
                                 >
                                     <span>📄</span>

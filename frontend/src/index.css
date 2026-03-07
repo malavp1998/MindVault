@@ -2,23 +2,25 @@
 
 /* ─── Custom Properties ──────────────────────────────────────── */
 :root {
-    --bg-primary: #0a0a12;
-    --bg-secondary: #12121e;
-    --bg-card: #16162a;
-    --bg-card-hover: #1c1c36;
-    --border: rgba(255, 255, 255, 0.06);
-    --border-hover: rgba(139, 92, 246, 0.3);
-    --text-primary: #f0f0f5;
-    --text-secondary: #a0a0b8;
-    --text-muted: #666680;
-    --accent: #8b5cf6;
-    --accent-light: #a78bfa;
-    --accent-glow: rgba(139, 92, 246, 0.15);
-    --gradient-primary: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
-    --gradient-card: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-    --radius: 12px;
-    --radius-sm: 8px;
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --bg-primary: #F5F5F7;
+  --bg-secondary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F9F9FB;
+  --border: #E5E5EA;
+  --border-hover: rgba(124, 58, 237, 0.3);
+  --text-primary: #1A1A2E;
+  --text-secondary: #6B6B80;
+  --text-muted: #A0A0B0;
+  --accent: #7C3AED;
+  --accent-light: #8B5CF6;
+  --accent-hover: #6D28D9;
+  --accent-glow: rgba(124, 58, 237, 0.10);
+  --gradient-primary: linear-gradient(135deg, #7C3AED, #A855F7);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.07);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.07);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.09);
 }
 
 /* ─── Base ────────────────────────────────────────────────────── */
@@ -28,13 +30,7 @@
     box-sizing: border-box;
 }
 
-body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-}
+body { background: var(--bg-primary); color: var(--text-primary); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; }
 
 a {
     color: var(--accent-light);
@@ -54,7 +50,7 @@ a:hover {
 
 .app-sidebar {
     width: 260px;
-    background: var(--bg-secondary);
+    background: #FFFFFF;
     border-right: 1px solid var(--border);
     padding: 24px 0;
     position: fixed;
@@ -67,10 +63,11 @@ a:hover {
 }
 
 .app-main {
-    margin-left: 260px;
+    margin-left: 220px;
     flex: 1;
     padding: 32px 40px;
     min-height: 100vh;
+    background: var(--bg-primary);
 }
 
 /* ─── Sidebar Styles ──────────────────────────────────────────── */
@@ -116,13 +113,14 @@ a:hover {
 }
 
 .nav-link:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0,0,0,0.03);
     color: var(--text-primary);
 }
 
 .nav-link.active {
-    background: var(--accent-glow);
-    color: var(--accent-light);
+    background: #EDE9FE;
+    color: #7C3AED;
+    border-left: 3px solid #7C3AED;
 }
 
 .nav-link .icon {
@@ -150,19 +148,20 @@ a:hover {
 
 /* ─── Cards ───────────────────────────────────────────────────── */
 .card {
-    background: var(--bg-card);
+    background: #FFFFFF;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 20px;
+    box-shadow: var(--shadow-sm);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
 }
 
 .card:hover {
-    background: var(--bg-card-hover);
+    background: #FAFAFA;
     border-color: var(--border-hover);
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.08);
+    box-shadow: var(--shadow-md);
 }
 
 .card-title {

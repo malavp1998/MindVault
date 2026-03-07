@@ -5,7 +5,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from jose import JWTError, jwt
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,29 +31,6 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     if len(password) < 4:
         return False, "Password must be at least 4 characters"
     return True, ""
-
-# ── JWT UTILS ─────────────────────────────────────────
-
-def create_access_token(user_id: str, identifier: str) -> str:
-    """Create a signed JWT access token."""
-    payload = {
-        "sub": str(user_id),
-        "identifier": identifier, # Could be username or phone
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_access_token_expire_minutes),
-        "iat": datetime.now(timezone.utc),
-    }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
-
-def decode_token(token: str) -> dict | None:
-    """Decode and verify a JWT token. Returns payload or None on failure."""
-    try:
-        return jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-    except JWTError:
-        return None
 
 # ── USER UTILS ────────────────────────────────────────
 

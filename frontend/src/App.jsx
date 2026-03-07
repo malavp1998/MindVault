@@ -1,5 +1,7 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import SettingsModal from './components/SettingsModal';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import VaultPage from './pages/VaultPage';
@@ -10,36 +12,66 @@ import ChatPage from './pages/ChatPage';
 
 function Sidebar() {
     const { user, logout } = useAuth();
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+
+    const navItems = [
+        { to: "/", end: true, icon: "📚", label: "Vault" },
+        { to: "/topics", icon: "🗺️", label: "Topics" },
+        { to: "/search", icon: "🔍", label: "Search" },
+        { to: "/chat", icon: "💬", label: "Chat" },
+    ];
 
     return (
-        <nav className="app-sidebar">
-            <div className="sidebar-logo">
-                <h1>🧠 MindVault</h1>
-                <p>AI Second Brain</p>
-            </div>
-            <div className="sidebar-nav">
-                <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <span className="icon">📚</span> Vault
-                </NavLink>
-                <NavLink to="/topics" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <span className="icon">🗺️</span> Topics
-                </NavLink>
-                <NavLink to="/search" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <span className="icon">🔍</span> Search
-                </NavLink>
-                <NavLink to="/chat" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <span className="icon">💬</span> Chat
-                </NavLink>
-            </div>
-            {/* User info at bottom */}
-            <div className="sidebar-user">
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span className="sidebar-user-name">@{user?.username}</span>
-                    <span className="sidebar-user-email" style={{ fontSize: '0.75rem', color: '#888' }}>{user?.email}</span>
+        <nav style={{ width: 220, background: "#fff", borderRight: "1px solid #E5E5EA", padding: "20px 0", position: "fixed", top: 0, left: 0, height: "100vh", display: "flex", flexDirection: "column", zIndex: 100, fontFamily: "Inter,sans-serif" }}>
+            <div style={{ padding: "0 20px 20px", borderBottom: "1px solid #E5E5EA", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 20 }}>🧠</span>
+                    <div>
+                        <div style={{ fontWeight: 800, fontSize: 16, background: "linear-gradient(135deg,#7C3AED,#A855F7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>MindVault</div>
+                        <div style={{ fontSize: 10, color: "#A0A0B0", letterSpacing: 1, textTransform: "uppercase" }}>AI Second Brain</div>
+                    </div>
                 </div>
-                <button onClick={logout} className="sidebar-logout-btn">
-                    Logout
+            </div>
+
+            <div style={{ padding: "0 10px", flex: 1 }}>
+                {navItems.map(({ to, end, icon, label }) => (
+                    <NavLink key={to} to={to} end={end}
+                        className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, marginBottom: 2, fontSize: 14, fontWeight: 500, textDecoration: "none", transition: "all 0.15s" }}>
+                        <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{icon}</span> {label}
+                    </NavLink>
+                ))}
+            </div>
+
+            <div style={{ position: "relative" }}>
+                {menuOpen && (
+                    <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 10, right: 10, background: "#fff", border: "1px solid #E5E5EA", borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.10)", overflow: "hidden", zIndex: 200 }}>
+                        <div style={{ padding: "10px 14px", borderBottom: "1px solid #F0F0F5" }}>
+                            <p style={{ fontSize: 12, color: "#6B6B80", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.email}</p>
+                        </div>
+                        <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}
+                            style={{ width: "100%", padding: "11px 14px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#1A1A2E", textAlign: "left" }}>
+                            ⚙️ Settings
+                        </button>
+                        <button onClick={() => { logout(); setMenuOpen(false); }}
+                            style={{ width: "100%", padding: "11px 14px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#DC2626", textAlign: "left" }}>
+                            → Log out
+                        </button>
+                    </div>
+                )}
+                <button onClick={() => setMenuOpen(o => !o)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "none", border: "none", borderTop: "1px solid #F0F0F5", cursor: "pointer" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1A1A2E", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                        {user?.username?.[0]?.toUpperCase() || "U"}
+                    </div>
+                    <div style={{ flex: 1, textAlign: "left", minWidth: 0 }}>
+                        <p style={{ fontWeight: 600, fontSize: 13, color: "#1A1A2E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.username}</p>
+                        <p style={{ fontSize: 11, color: "#A0A0B0" }}>@{user?.username}</p>
+                    </div>
+                    <span style={{ color: "#A0A0B0", fontSize: 12 }}>⇕</span>
                 </button>
+                {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
             </div>
         </nav>
     );

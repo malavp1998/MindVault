@@ -42,11 +42,9 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_phone_number: str = ""
 
-    # Auth & JWT Settings
+    # Auth Settings
     auth_method: str = "credentials"  # "credentials" or "otp"
-    jwt_secret_key: str = "change_me_to_a_32_char_minimum_secret"
-    jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 10080  # 7 days
+    firebase_project_id: str = "mindvault-1"
 
     # OTP settings (only used if auth_method="otp")
     otp_expire_minutes: int = 10
