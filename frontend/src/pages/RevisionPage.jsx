@@ -135,43 +135,40 @@ export default function RevisionPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex layout-container">
-            <Sidebar />
-            <main className="flex-1 flex flex-col items-center pt-10 sm:pt-16 pb-20 px-4 overflow-y-auto">
-                <div className="w-full max-w-3xl">
-                    {loading && <RevisionSkeleton />}
+        <div className="flex-1 flex flex-col items-center pt-10 sm:pt-16 pb-20 px-4 overflow-y-auto w-full h-full bg-gray-50 dark:bg-gray-900">
+            <div className="w-full max-w-3xl">
+                {loading && <RevisionSkeleton />}
 
-                    {!loading && allCaughtUp && <AllCaughtUp streak={streak} />}
+                {!loading && allCaughtUp && <AllCaughtUp streak={streak} />}
 
-                    {!loading && !allCaughtUp && isComplete && (
-                        <RevisionComplete
+                {!loading && !allCaughtUp && isComplete && (
+                    <RevisionComplete
+                        streak={streak}
+                        total={notes.length}
+                        counts={counts}
+                    />
+                )}
+
+                {!loading && !allCaughtUp && !isComplete && notes.length > 0 && (
+                    <div className="animate-fade-in">
+                        <RevisionProgress
                             streak={streak}
+                            current={currentIndex + 1}
                             total={notes.length}
-                            counts={counts}
+                            ratings={ratings}
                         />
-                    )}
-
-                    {!loading && !allCaughtUp && !isComplete && notes.length > 0 && (
-                        <div className="animate-fade-in">
-                            <RevisionProgress
-                                streak={streak}
-                                current={currentIndex + 1}
-                                total={notes.length}
-                                ratings={ratings}
-                            />
-                            <RevisionCard
-                                key={notes[currentIndex].id} // force re-render on new note
-                                note={notes[currentIndex]}
-                                total={notes.length}
-                                currentIdx={currentIndex}
-                                onRate={handleRate}
-                                onSkip={handleSkip}
-                                rateResult={rateResult}
-                            />
-                        </div>
-                    )}
-                </div>
-            </main>
+                        <RevisionCard
+                            key={notes[currentIndex].id} // force re-render on new note
+                            note={notes[currentIndex]}
+                            total={notes.length}
+                            currentIdx={currentIndex}
+                            onRate={handleRate}
+                            onSkip={handleSkip}
+                            rateResult={rateResult}
+                        />
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
