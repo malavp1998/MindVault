@@ -26,6 +26,9 @@ clustering_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 # ── In-memory cache of fitted clusterer for incremental predictions ────────
 _fitted_clusterer = None
 _fitted_reducer_cluster = None
+_fitted_reducer_2d = None
+_notes_since_full_cluster: dict[str, int] = {}
+FULL_RECLUSTER_THRESHOLD = 20
 
 
 async def _generate_topic_name(sample_contents: list[str]) -> str:
@@ -92,9 +95,10 @@ def _run_umap_hdbscan(X: np.ndarray):
     coords_2d = reducer_2d.fit_transform(X)
 
     # Cache for incremental use
-    global _fitted_clusterer, _fitted_reducer_cluster
+    global _fitted_clusterer, _fitted_reducer_cluster, _fitted_reducer_2d
     _fitted_clusterer = clusterer
     _fitted_reducer_cluster = reducer_cluster
+    _fitted_reducer_2d = reducer_2d
 
     return labels, probabilities, coords_2d
 
@@ -272,3 +276,65 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
             await db.rollback()
             logger.error(f"Clustering failed: {e}", exc_info=True)
             raise
+
+
+async def assign_new_note_incremental(note_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    """
+    Try to assign a single new note to an existing cluster without re-running
+    the full pipeline. Returns True if successful, False if a full recluster
+    is needed instead.
+    """
+    if (
+        _fitted_clusterer is None
+        or _fitted_reducer_cluster is None
+        or _fitted_reducer_2d is None
+    ):
+        return False   # cold cache → caller must fall back to full cluster_notes()
+
+    async with async_session() as db:
+        note = await db.get(Note, note_id)
+        if note is None or note.embedding is None:
+            return False
+        embedding = np.array(note.embedding).reshape(1, -1)
+
+    # Run transforms in thread pool (they release the GIL but still take time)
+    loop = asyncio.get_running_loop()
+
+    def _predict():
+        from hdbscan import approximate_predict
+        X_reduced = _fitted_reducer_cluster.transform(embedding)
+        labels, strengths = approximate_predict(_fitted_clusterer, X_reduced)
+        coord_2d = _fitted_reducer_2d.transform(embedding)
+        return int(labels[0]), float(strengths[0]), coord_2d[0]
+
+    label, strength, coord = await loop.run_in_executor(clustering_executor, _predict)
+
+    async with async_session() as db:
+        note = await db.get(Note, note_id)
+        if note is None:
+            return False
+
+        note.graph_x = float(coord[0])
+        note.graph_y = float(coord[1])
+
+        if label == -1:
+            # Outlier — leave topic_id as None for now; full recluster will handle it
+            note.topic_id = None
+        else:
+            # Find the Topic row that corresponds to this cluster_id
+            result = await db.execute(
+                select(Topic).where(
+                    Topic.cluster_id == label,
+                    Topic.user_id == user_id,
+                )
+            )
+            topic = result.scalar_one_or_none()
+            if topic:
+                note.topic_id = topic.id
+                topic.note_count = (topic.note_count or 0) + 1
+            else:
+                note.topic_id = None  # orphan cluster — trigger recluster soon
+
+        await db.commit()
+
+    return True

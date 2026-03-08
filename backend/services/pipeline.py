@@ -11,7 +11,7 @@ from services.embedding import get_embedding
 from services.llm import generate_summary, extract_concepts
 from services.language import detect_language
 from services.tagging import generate_tags
-from services.clustering import cluster_notes
+from services.clustering import cluster_notes, assign_new_note_incremental, _notes_since_full_cluster, FULL_RECLUSTER_THRESHOLD
 from services.semantic_cache import invalidate_user_cache
 from langsmith import traceable
 import asyncio
@@ -117,15 +117,31 @@ async def process_note(note_id: uuid.UUID) -> None:
                 await invalidate_user_cache(str(note_user_id), cache_key="chat")
 
             # --- Auto Clustering ---
-            # Fire-and-forget background task to re-run KMeans (scoped to user)
+            # Smart two-path logic: incremental assignment vs full recluster
             if note_user_id:
-                asyncio.create_task(cluster_notes(user_id=note_user_id))
+                user_key = str(note_user_id)
+                _notes_since_full_cluster[user_key] = _notes_since_full_cluster.get(user_key, 0) + 1
+
+                if _notes_since_full_cluster[user_key] >= FULL_RECLUSTER_THRESHOLD:
+                    # Time for a full recluster
+                    _notes_since_full_cluster[user_key] = 0
+                    asyncio.create_task(cluster_notes(user_id=note_user_id))
+                else:
+                    # Try fast incremental assignment
+                    asyncio.create_task(_incremental_or_fallback(note_id, note_user_id))
             else:
                 asyncio.create_task(cluster_notes())
 
         except Exception as e:
             logger.error(f"Pipeline DB write failed for note {note_id}: {e}", exc_info=True)
             await db.rollback()
+
+
+async def _incremental_or_fallback(note_id: uuid.UUID, user_id: uuid.UUID):
+    """Try incremental assignment; fall back to full cluster_notes() if the cache was cold."""
+    success = await assign_new_note_incremental(note_id, user_id)
+    if not success:
+        await cluster_notes(user_id=user_id)
 
 
 async def _create_links(
