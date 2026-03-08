@@ -180,16 +180,41 @@ async def get_session_messages(
     )
     messages = result.scalars().all()
 
-    return [
-        {
+    # Collect all unique cited note ids from history
+    all_cited_ids = set()
+    for m in messages:
+        if m.cited_note_ids:
+            all_cited_ids.update(m.cited_note_ids)
+
+    notes_map = {}
+    if all_cited_ids:
+        # Fetch titles for cited notes
+        notes_res = await db.execute(
+            select(Note.id, Note.title).where(Note.id.in_(all_cited_ids))
+        )
+        for nid, title in notes_res.all():
+            notes_map[str(nid)] = title
+
+    out_messages = []
+    for m in messages:
+        cited_notes = []
+        if m.cited_note_ids:
+            for nid in m.cited_note_ids:
+                if str(nid) in notes_map:
+                    cited_notes.append({
+                        "id": str(nid),
+                        "title": notes_map[str(nid)],
+                    })
+        
+        out_messages.append({
             "id": str(m.id),
             "role": m.role,
             "content": m.content,
-            "cited_note_ids": m.cited_note_ids or [],
+            "cited_notes": cited_notes,
             "created_at": m.created_at.isoformat(),
-        }
-        for m in messages
-    ]
+        })
+
+    return out_messages
 
 
 @router.post("/message")

@@ -98,8 +98,7 @@ async def chat_with_vault(
             "vault ke basis par jawab deta hai.\n\n"
             "Neeche user ke saved notes hain. Sirf inhi notes ke basis par "
             "jawab do. Agar notes mein answer nahi hai to clearly batao. "
-            "Answer same language mein do jisme question hai. "
-            "Har answer ke end mein mention karo ki kis note se information li.\n\n"
+            "Answer same language mein do jisme question hai.\n\n"
             f"USER KE NOTES:\n{notes_context if notes_context else 'Abhi koi notes nahi hain.'}"
         )
     else:
@@ -108,8 +107,7 @@ async def chat_with_vault(
             "on the user's personal knowledge vault.\n\n"
             "Below are the user's saved notes relevant to this conversation. "
             "Answer ONLY based on these notes. If the notes don't contain "
-            "enough information, say so clearly — do not make things up. "
-            "Always mention which note(s) you used at the end of your answer.\n\n"
+            "enough information, say so clearly — do not make things up.\n\n"
             f"USER'S RELEVANT NOTES:\n{notes_context if notes_context else 'No notes found yet.'}"
         )
 
