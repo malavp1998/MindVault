@@ -89,15 +89,26 @@ export default function GraphView({
 
     const handleNodeHover = useCallback((node) => {
         if (node) {
+            // Pin node in place while hovering
+            node.fx = node.x;
+            node.fy = node.y;
             const { ids, ls } = connectedSet(node);
             setHlNodes(ids);
             setHlLinks(ls);
         } else {
+            // Unpin previous node when cursor leaves (only if sim is still running)
+            if (hoveredNode && hoveredNode.fx !== undefined) {
+                const simAlpha = graphRef.current?.d3Alpha?.() ?? 0;
+                if (simAlpha > 0.01) {
+                    hoveredNode.fx = undefined;
+                    hoveredNode.fy = undefined;
+                }
+            }
             setHlNodes(new Set());
             setHlLinks(new Set());
         }
         setHoveredNode(node || null);
-    }, [connectedSet]);
+    }, [connectedSet, hoveredNode]);
 
     const handleNodeClick = useCallback((node) => {
         // Toggle local graph focus
@@ -129,6 +140,16 @@ export default function GraphView({
             y: n.graph_y != null ? n.graph_y * UMAP_SCALE : n.y,
         }));
     }, [localData.nodes]);
+
+    // Unpin nodes when data updates (recluster)
+    useEffect(() => {
+        if (data?.nodes) {
+            data.nodes.forEach(n => {
+                n.fx = undefined;
+                n.fy = undefined;
+            });
+        }
+    }, [data]);
 
     // ── Node painter ─────────────────────────────────────────────────
     const paintNode = useCallback((node, ctx, globalScale) => {
@@ -262,12 +283,19 @@ export default function GraphView({
                 linkDirectionalParticleWidth={2}
                 linkDirectionalParticleColor={link => link.type === "semantic_link" ? "#3B82F6" : "#7C3AED"}
                 backgroundColor={CANVAS_BG}
-                cooldownTicks={200}
-                d3AlphaDecay={0.015}
-                d3VelocityDecay={0.3}
+                cooldownTicks={150}
+                d3AlphaDecay={0.04}
+                d3VelocityDecay={0.6}
                 // Stronger repulsion for more spread
                 d3Force="charge"
                 nodeRelSize={1}
+                onEngineStop={() => {
+                    // Pin all nodes at their settled positions
+                    graphRef.current?.graphData().nodes.forEach(n => {
+                        n.fx = n.x;
+                        n.fy = n.y;
+                    });
+                }}
             />
         </div>
     );

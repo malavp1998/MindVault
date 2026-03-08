@@ -10,12 +10,12 @@ import logging
 import uuid
 import numpy as np
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 import concurrent.futures
+from urllib.parse import urlparse, urlunparse
 
 from models import Note, Topic
 from services.llm import llm_complete
-from database import async_session
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,31 @@ _fitted_reducer_cluster = None
 _fitted_reducer_2d = None
 _notes_since_full_cluster: dict[str, int] = {}
 FULL_RECLUSTER_THRESHOLD = 20
+
+
+# ── Dedicated low-priority DB engine for clustering ───────────────────────
+# Small pool (size=2) ensures clustering never starves the main app's connections.
+# Clustering waits for a connection rather than the app waiting.
+def _make_clustering_session():
+    from config import get_settings
+    _settings = get_settings()
+    _raw = _settings.database_url
+    _parsed = urlparse(_raw)
+    _needs_ssl = bool(_parsed.query)
+    _url = urlunparse(_parsed._replace(query=""))
+    _connect_args = {"ssl": True} if _needs_ssl else {}
+
+    _engine = create_async_engine(
+        _url,
+        pool_size=2,
+        max_overflow=0,
+        pool_pre_ping=True,
+        pool_timeout=120,
+        connect_args=_connect_args,
+    )
+    return async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
+
+_clustering_session = _make_clustering_session()
 
 
 async def _generate_topic_name(sample_contents: list[str]) -> str:
@@ -111,11 +136,14 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
     """
     Fetch all embeddings → UMAP + HDBSCAN cluster → upsert Topics → store 2D coords.
     Falls back to KMeans-style single-cluster assignment for vaults with < 5 notes.
+
+    Uses a dedicated DB engine (pool_size=2) so clustering never starves the
+    main app's connection pool.
     """
     logger.info(f"[cluster_notes] Starting for user_id={user_id}")
-    
-    # --- Phase 1: Fetch data (Session 1) ---
-    async with async_session() as db:
+
+    # --- Phase 1: Fetch data (dedicated session) ---
+    async with _clustering_session() as db:
         try:
             query = select(Note).where(Note.embedding.isnot(None))
             if user_id is not None:
@@ -180,31 +208,22 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
             topic_name = "General Notes"
         cluster_topics[cluster_id] = topic_name.strip()[:100]
 
-    # --- Phase 3: Write Results (Session 2) ---
+    # --- Phase 3: Write Results (dedicated session, single flush + commit) ---
     logger.info("Computations complete. Re-opening DB connection to save results.")
-    async with async_session() as db:
+    async with _clustering_session() as db:
         try:
-            await db.rollback() # Ensure cleanliness
-            
-            # Re-fetch notes to update them
-            result = await db.execute(select(Note).where(Note.id.in_(note_ids)))
-            raw_notes = result.scalars().all()
-            notes_by_id = {n.id: n for n in raw_notes}
+            await db.rollback()  # Ensure cleanliness
 
-            # ── Store 2D coordinates on each note ──
-            for i, nid in enumerate(note_ids):
-                note = notes_by_id.get(nid)
-                if note:
-                    note.graph_x = float(coords_2d[i, 0])
-                    note.graph_y = float(coords_2d[i, 1])
+            # ── Pass 1: Upsert all Topic rows, collect their IDs ──
+            topic_id_map = {}  # cluster_id → (topic, cluster_note_ids)
 
-            # ── Upsert Topics per cluster ───────────────────────────────
             for cluster_id in unique_cluster_ids:
                 cluster_indices = [i for i, l in enumerate(labels) if l == cluster_id]
                 cluster_note_ids = [note_ids[i] for i in cluster_indices]
                 topic_name = cluster_topics[cluster_id]
+                cluster_embeddings = X[[i for i, l in enumerate(labels) if l == cluster_id]]
+                centroid = cluster_embeddings.mean(axis=0).tolist()
 
-                # Upsert Topic
                 existing_res = await db.execute(
                     select(Topic).where(
                         Topic.cluster_id == cluster_id,
@@ -219,23 +238,37 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
                         cluster_id=cluster_id,
                         note_count=len(cluster_note_ids),
                         user_id=user_id,
+                        centroid=centroid,
                     )
                     db.add(topic)
                 else:
                     topic.name = topic_name
                     topic.note_count = len(cluster_note_ids)
+                    topic.centroid = centroid
 
-                await db.flush()
+                topic_id_map[cluster_id] = (topic, cluster_note_ids)
 
-                # Set topic centroid as mean of member embeddings
-                cluster_embeddings = X[[i for i, l in enumerate(labels) if l == cluster_id]]
-                centroid = cluster_embeddings.mean(axis=0).tolist()
-                topic.centroid = centroid
+            # Single flush to get all topic IDs assigned by DB
+            await db.flush()
 
+            # ── Pass 2: Bulk UPDATE note topic_id per cluster ──
+            for cluster_id, (topic, cluster_note_ids) in topic_id_map.items():
                 await db.execute(
                     text("UPDATE notes SET topic_id = :t_id WHERE id = ANY(:n_ids)"),
                     {"t_id": str(topic.id), "n_ids": [str(nid) for nid in cluster_note_ids]},
                 )
+
+            # ── Batch UPDATE all graph coords in one statement ──
+            if note_ids:
+                values_sql = ", ".join(
+                    f"(CAST('{str(nid)}' AS uuid), {float(coords_2d[i, 0])}, {float(coords_2d[i, 1])})"
+                    for i, nid in enumerate(note_ids)
+                )
+                await db.execute(text(f"""
+                    UPDATE notes SET graph_x = v.x, graph_y = v.y
+                    FROM (VALUES {values_sql}) AS v(id, x, y)
+                    WHERE notes.id = v.id
+                """))
 
             # Clear topic from outlier notes
             outlier_ids = [note_ids[i] for i, l in enumerate(labels) if l == -1]
@@ -246,33 +279,33 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
                 )
 
             # Remove stale Topics no longer in active clusters
-            active_cluster_ids = set(unique_cluster_ids)
-            if active_cluster_ids:
-                if user_id is not None:
-                    await db.execute(
-                        text(
-                            "DELETE FROM topics "
-                            "WHERE cluster_id IS NOT NULL "
-                            "AND cluster_id != ALL(:ids) "
-                            "AND user_id = :uid"
-                        ),
-                        {"ids": list(active_cluster_ids), "uid": str(user_id)},
-                    )
-                else:
-                    await db.execute(
-                        text(
-                            "DELETE FROM topics "
-                            "WHERE cluster_id IS NOT NULL "
-                            "AND cluster_id != ALL(:ids) "
-                            "AND user_id IS NULL"
-                        ),
-                        {"ids": list(active_cluster_ids)},
-                    )
+            active_cluster_ids = list(set(unique_cluster_ids))
+            if active_cluster_ids and user_id is not None:
+                await db.execute(
+                    text(
+                        "DELETE FROM topics "
+                        "WHERE cluster_id IS NOT NULL "
+                        "AND cluster_id != ALL(:ids) "
+                        "AND user_id = :uid"
+                    ),
+                    {"ids": active_cluster_ids, "uid": str(user_id)},
+                )
+            elif active_cluster_ids:
+                await db.execute(
+                    text(
+                        "DELETE FROM topics "
+                        "WHERE cluster_id IS NOT NULL "
+                        "AND cluster_id != ALL(:ids) "
+                        "AND user_id IS NULL"
+                    ),
+                    {"ids": active_cluster_ids},
+                )
 
             logger.info(
                 f"[cluster_notes] Committing {len(unique_cluster_ids)} clusters "
                 f"({len(notes_db)} notes) for user_id={user_id}"
             )
+            # Single commit — one round-trip, session released immediately
             await db.commit()
             logger.info("Clustering complete and committed.")
 
@@ -295,7 +328,7 @@ async def assign_new_note_incremental(note_id: uuid.UUID, user_id: uuid.UUID) ->
     ):
         return False   # cold cache → caller must fall back to full cluster_notes()
 
-    async with async_session() as db:
+    async with _clustering_session() as db:
         note = await db.get(Note, note_id)
         if note is None or note.embedding is None:
             return False
@@ -313,7 +346,7 @@ async def assign_new_note_incremental(note_id: uuid.UUID, user_id: uuid.UUID) ->
 
     label, strength, coord = await loop.run_in_executor(clustering_executor, _predict)
 
-    async with async_session() as db:
+    async with _clustering_session() as db:
         note = await db.get(Note, note_id)
         if note is None:
             return False
