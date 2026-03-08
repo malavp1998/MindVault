@@ -28,9 +28,9 @@ export default function GraphView({
     const CANVAS_NODE_HOVER = cssVars?.getPropertyValue("--bg-card-hover").trim() || "#F9F9FB";
     const CANVAS_LABEL = cssVars?.getPropertyValue("--text-secondary").trim() || "#6B6B80";
     const CANVAS_LABEL_TOPIC = cssVars?.getPropertyValue("--accent-hover").trim() || "#6D28D9";
-    const CANVAS_OUTLIER = "#C4B5FD";   // muted purple
+    const CANVAS_OUTLIER = "#D1D5DB";   // neutral gray
     const CANVAS_RING = cssVars?.getPropertyValue("--accent").trim() || "#7C3AED";
-    const CANVAS_TAG_EDGE = "#C4B5FD";   // intentional soft purple
+    const CANVAS_TAG_EDGE = "#9CA3AF";   // intentional soft purple
 
     const graphRef = useRef();
     const [hoveredNode, setHoveredNode] = useState(null);
@@ -213,10 +213,10 @@ export default function GraphView({
         const type = link.type;
 
         const styles = {
-            topic_link: { color: "#7C3AED", width: 1.2, opacity: 0.5 },
-            semantic_link: { color: "#3B82F6", width: (link.weight || 0.75) * 2, opacity: 0.45 },
-            tag_link: { color: CANVAS_TAG_EDGE, width: 0.5, opacity: 0.35 },
-            backlink: { color: "#10B981", width: 1.2, opacity: 0.65 },
+            topic_link: { color: "#7C3AED", width: 1.2, opacity: 0.7 },
+            semantic_link: { color: "#3B82F6", width: (link.weight || 0.75) * 2, opacity: 0.6 },
+            tag_link: { color: CANVAS_TAG_EDGE, width: 0.5, opacity: 0.5 },
+            backlink: { color: "#10B981", width: 1.2, opacity: 0.75 },
         };
         const s = styles[type] ?? { color: "#4B5563", width: 0.7, opacity: 0.25 };
 
