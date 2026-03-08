@@ -1,6 +1,7 @@
 from __future__ import annotations
 """Embedding service — supports Jina AI backend."""
 
+from httpx import Timeout
 from openai import AsyncOpenAI
 from langsmith.wrappers import wrap_openai
 from langsmith import traceable
@@ -16,7 +17,14 @@ def _get_jina_client() -> AsyncOpenAI:
     if _jina_client is None:
         _jina_client = wrap_openai(AsyncOpenAI(
             api_key=settings.jina_api_key,
-            base_url="https://api.jina.ai/v1"
+            base_url="https://api.jina.ai/v1",
+            timeout=Timeout(
+                connect=10.0,
+                read=60.0,
+                write=10.0,
+                pool=5.0
+            ),
+            max_retries=2
         ))
     return _jina_client
 

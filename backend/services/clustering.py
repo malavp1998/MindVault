@@ -62,6 +62,7 @@ def _run_umap_hdbscan(X: np.ndarray):
         min_dist=0.0,       # tight clusters → better density estimation
         metric="cosine",    # critical for embedding space
         low_memory=False,
+        n_jobs=1,           # Prevent multiprocessing deadlock inside ThreadPool
     )
     X_reduced = reducer_cluster.fit_transform(X)
 
@@ -74,6 +75,7 @@ def _run_umap_hdbscan(X: np.ndarray):
         metric="euclidean",             # euclidean on UMAP space is correct
         cluster_selection_method="eom", # excess of mass: handles varied densities
         prediction_data=True,           # enables approximate_predict for new notes
+        core_dist_n_jobs=1,
     )
     labels = clusterer.fit_predict(X_reduced)
     probabilities = clusterer.probabilities_
@@ -85,6 +87,7 @@ def _run_umap_hdbscan(X: np.ndarray):
         min_dist=0.3,       # allow spread for visual clarity
         metric="cosine",
         low_memory=False,
+        n_jobs=1,           # Prevent multiprocessing deadlock inside ThreadPool
     )
     coords_2d = reducer_2d.fit_transform(X)
 
@@ -140,7 +143,10 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
                 timeout=300.0,
             )
         except asyncio.TimeoutError:
-            logger.error("UMAP/HDBSCAN timed out after 300s — skipping clustering run")
+            logger.error("Clustering timed out after 300s — skipping this run")
+            return
+        except Exception as e:
+            logger.error(f"Clustering failed: {e}")
             return
 
     logger.info(
