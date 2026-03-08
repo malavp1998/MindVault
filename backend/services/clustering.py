@@ -45,10 +45,8 @@ async def _generate_topic_name(sample_contents: list[str]) -> str:
 def _run_umap_hdbscan(X: np.ndarray):
     """
     Full UMAP → HDBSCAN → UMAP-2D pipeline.
-    Returns: (labels, probabilities, coords_2d)
-    - labels: int array, -1 = unclassified outlier
-    - probabilities: float array [0,1], soft cluster membership confidence
-    - coords_2d: float array shape (n, 2), for graph layout
+    Parameters scale with vault size to preserve local cluster structure
+    on small datasets while remaining efficient on large ones.
     """
     import umap
     import hdbscan as hdbscan_lib
@@ -56,41 +54,47 @@ def _run_umap_hdbscan(X: np.ndarray):
     n = len(X)
 
     # ── Step 1: UMAP for clustering (higher dims, tight structure) ──
-    n_neighbors = min(15, n - 1)
-    n_components_cluster = min(15, n - 2) if n > 4 else 2
+    # n_neighbors scales to ~1/6 of vault size, capped at 15
+    # This keeps neighborhood coverage at ~15-20% regardless of vault size
+    n_neighbors = min(max(3, n // 6), 15)
+    n_components_cluster = min(max(2, n // 8), 15) if n > 4 else 2
 
     reducer_cluster = umap.UMAP(
         n_components=n_components_cluster,
         n_neighbors=n_neighbors,
-        min_dist=0.0,       # tight clusters → better density estimation
-        metric="cosine",    # critical for embedding space
+        min_dist=0.0,
+        metric="cosine",
         low_memory=False,
-        n_jobs=1,           # Prevent multiprocessing deadlock inside ThreadPool
+        n_jobs=1,
     )
     X_reduced = reducer_cluster.fit_transform(X)
 
     # ── Step 2: HDBSCAN clustering ──
-    min_cluster_size = max(2, n // 8)  # at least ~12% of notes per cluster
+    # min_cluster_size ~6-7% of vault — allows more clusters to form
+    # cluster_selection_method: "leaf" for small vaults (less merging),
+    #                           "eom" for large vaults (handles density variation)
+    min_cluster_size = max(2, n // 15)
 
     clusterer = hdbscan_lib.HDBSCAN(
         min_cluster_size=min_cluster_size,
         min_samples=1,
-        metric="euclidean",             # euclidean on UMAP space is correct
-        cluster_selection_method="eom", # excess of mass: handles varied densities
-        prediction_data=True,           # enables approximate_predict for new notes
+        metric="euclidean",
+        cluster_selection_method="leaf" if n < 100 else "eom",
+        prediction_data=True,
         core_dist_n_jobs=1,
     )
     labels = clusterer.fit_predict(X_reduced)
     probabilities = clusterer.probabilities_
 
-    # ── Step 3: UMAP 2D for graph layout (looser, spread out) ──
+    # ── Step 3: UMAP 2D for graph layout ──
+    n_neighbors_2d = min(max(3, n // 6), 15)  # same scaling for visual consistency
     reducer_2d = umap.UMAP(
         n_components=2,
-        n_neighbors=n_neighbors,
-        min_dist=0.3,       # allow spread for visual clarity
+        n_neighbors=n_neighbors_2d,
+        min_dist=0.3,
         metric="cosine",
         low_memory=False,
-        n_jobs=1,           # Prevent multiprocessing deadlock inside ThreadPool
+        n_jobs=1,
     )
     coords_2d = reducer_2d.fit_transform(X)
 
