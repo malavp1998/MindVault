@@ -67,37 +67,90 @@ async def _generate_topic_name(sample_contents: list[str]) -> str:
     return await llm_complete(prompt)
 
 
-def _run_umap_hdbscan(X: np.ndarray):
+# Threshold below which PCA is used instead of UMAP
+PCA_THRESHOLD = 100
+
+
+def _reduce_dimensions_cluster(X: np.ndarray, n_components: int):
     """
-    Full UMAP → HDBSCAN → UMAP-2D pipeline.
-    Parameters scale with vault size to preserve local cluster structure
-    on small datasets while remaining efficient on large ones.
+    Dimensionality reduction for clustering space.
+    PCA  — vaults < 100 notes  : ~10ms, ~10MB RAM, no epochs
+    UMAP — vaults >= 100 notes : better topology, 100 epochs (was 500)
+    Returns (X_reduced, fitted_reducer)
     """
-    import umap
+    n = len(X)
+
+    if n < PCA_THRESHOLD:
+        from sklearn.decomposition import PCA
+        n_comp = min(n_components, n - 1)
+        reducer = PCA(n_components=n_comp)
+        X_reduced = reducer.fit_transform(X)
+        return X_reduced, reducer
+    else:
+        import umap as umap_lib
+        reducer = umap_lib.UMAP(
+            n_components=n_components,
+            n_neighbors=min(max(3, n // 6), 15),
+            min_dist=0.0,
+            metric="cosine",
+            n_epochs=100,
+            low_memory=True,
+            n_jobs=1,
+        )
+        X_reduced = reducer.fit_transform(X)
+        return X_reduced, reducer
+
+
+def _reduce_dimensions_2d(X: np.ndarray):
+    """
+    2D reduction for graph layout coordinates.
+    PCA  — vaults < 100 notes  : ~5ms
+    UMAP — vaults >= 100 notes : 100 epochs (was 500)
+    Returns (coords_2d, fitted_reducer_2d)
+    """
+    n = len(X)
+
+    if n < PCA_THRESHOLD:
+        from sklearn.decomposition import PCA
+        reducer_2d = PCA(n_components=2)
+        coords_2d = reducer_2d.fit_transform(X)
+        # Scale to match UMAP output range (~-10 to 10) for graph layout
+        coords_2d = coords_2d / (coords_2d.std() + 1e-8) * 5
+        return coords_2d, reducer_2d
+    else:
+        import umap as umap_lib
+        n_neighbors = min(max(3, n // 6), 15)
+        reducer_2d = umap_lib.UMAP(
+            n_components=2,
+            n_neighbors=n_neighbors,
+            min_dist=0.3,
+            metric="cosine",
+            n_epochs=100,
+            low_memory=True,
+            n_jobs=1,
+        )
+        coords_2d = reducer_2d.fit_transform(X)
+        return coords_2d, reducer_2d
+
+
+def _run_clustering_pipeline(X: np.ndarray):
+    """
+    Hybrid clustering pipeline:
+    - n < 100  : PCA → HDBSCAN → PCA-2D   (~10ms, ~10MB RAM)
+    - n >= 100 : UMAP → HDBSCAN → UMAP-2D (~30s, low_memory mode)
+
+    Returns: (labels, probabilities, coords_2d)
+    """
     import hdbscan as hdbscan_lib
 
     n = len(X)
+    method = "PCA" if n < PCA_THRESHOLD else "UMAP"
 
-    # ── Step 1: UMAP for clustering (higher dims, tight structure) ──
-    # n_neighbors scales to ~1/6 of vault size, capped at 15
-    # This keeps neighborhood coverage at ~15-20% regardless of vault size
-    n_neighbors = min(max(3, n // 6), 15)
+    # ── Step 1: Dimensionality reduction for clustering ──
     n_components_cluster = min(max(2, n // 8), 15) if n > 4 else 2
-
-    reducer_cluster = umap.UMAP(
-        n_components=n_components_cluster,
-        n_neighbors=n_neighbors,
-        min_dist=0.0,
-        metric="cosine",
-        low_memory=False,
-        n_jobs=1,
-    )
-    X_reduced = reducer_cluster.fit_transform(X)
+    X_reduced, reducer_cluster = _reduce_dimensions_cluster(X, n_components_cluster)
 
     # ── Step 2: HDBSCAN clustering ──
-    # min_cluster_size ~6-7% of vault — allows more clusters to form
-    # cluster_selection_method: "leaf" for small vaults (less merging),
-    #                           "eom" for large vaults (handles density variation)
     min_cluster_size = max(2, n // 15)
 
     clusterer = hdbscan_lib.HDBSCAN(
@@ -111,23 +164,20 @@ def _run_umap_hdbscan(X: np.ndarray):
     labels = clusterer.fit_predict(X_reduced)
     probabilities = clusterer.probabilities_
 
-    # ── Step 3: UMAP 2D for graph layout ──
-    n_neighbors_2d = min(max(3, n // 6), 15)  # same scaling for visual consistency
-    reducer_2d = umap.UMAP(
-        n_components=2,
-        n_neighbors=n_neighbors_2d,
-        min_dist=0.3,
-        metric="cosine",
-        low_memory=False,
-        n_jobs=1,
-    )
-    coords_2d = reducer_2d.fit_transform(X)
+    # ── Step 3: 2D reduction for graph layout ──
+    coords_2d, reducer_2d = _reduce_dimensions_2d(X)
 
-    # Cache for incremental use
+    # ── Cache fitted models for incremental predictions ──
     global _fitted_clusterer, _fitted_reducer_cluster, _fitted_reducer_2d
     _fitted_clusterer = clusterer
     _fitted_reducer_cluster = reducer_cluster
     _fitted_reducer_2d = reducer_2d
+
+    n_clusters = len(set(l for l in labels if l >= 0))
+    n_outliers = sum(1 for l in labels if l == -1)
+    logger.info(
+        f"[{method}+HDBSCAN] {n} notes → {n_clusters} clusters, {n_outliers} outliers"
+    )
 
     return labels, probabilities, coords_2d
 
@@ -172,14 +222,15 @@ async def cluster_notes(user_id: uuid.UUID | None = None) -> None:
         coords_2d = np.random.randn(len(notes_db), 2) * 100
     else:
         try:
+            _timeout = 60.0 if len(X) < PCA_THRESHOLD else 600.0
             labels, probabilities, coords_2d = await asyncio.wait_for(
                 asyncio.get_running_loop().run_in_executor(
-                    clustering_executor, _run_umap_hdbscan, X
+                    clustering_executor, _run_clustering_pipeline, X
                 ),
-                timeout=300.0,
+                timeout=_timeout,
             )
         except asyncio.TimeoutError:
-            logger.error("Clustering timed out after 300s — skipping this run")
+            logger.error(f"Clustering timed out — skipping this run")
             return
         except Exception as e:
             logger.error(f"Clustering failed: {e}")
