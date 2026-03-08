@@ -10,7 +10,8 @@
 ## Table of Contents
 
 1. [Semantic Caching](#1-semantic-caching)
-2. *(more techniques will be added as they are implemented)*
+2. [Incremental HDBSCAN Clustering](#2-incremental-hdbscan-clustering)
+3. *(more techniques will be added as they are implemented)*
 
 ---
 
@@ -237,6 +238,87 @@ Example response:
   "cache_hit_rate": 38.5
 }
 ```
+
+## 2. Incremental HDBSCAN Clustering
+
+### Motivation
+
+Previously, every new note saved triggered a full UMAP → HDBSCAN → UMAP-2D
+pipeline run on all notes. With a growing vault this became progressively
+slower (8–15s for 200+ notes) and wasted compute on notes whose clusters
+hadn't changed at all.
+
+HDBSCAN supports `approximate_predict()` for assigning new points to an
+already-fitted model — making per-note incremental assignment possible.
+
+---
+
+### What It Is
+
+A two-path strategy that separates cheap per-note assignment from expensive
+periodic retraining:
+```text
+New note saved
+        ↓
+Warm cache exists? (fitted UMAP + HDBSCAN model in memory)
+        ↓ YES                             ↓ NO
+approximate_predict on new embedding    full cluster_notes() run
+transform via cached UMAP reducers      caches fitted model after run
+write topic_id + graph coords           ← same result, slower path
+        ↓
+notes_since_full_cluster counter++
+        ↓
+counter >= 20?
+        ↓ YES
+also trigger full cluster_notes()       ← refresh model in background
+reset counter
+```
+
+---
+
+### Implementation Details
+
+Three globals are cached after each full run in `clustering.py`:
+- `_fitted_clusterer` — the trained HDBSCAN model
+- `_fitted_reducer_cluster` — high-dim UMAP for cluster space
+- `_fitted_reducer_2d` — 2D UMAP for graph layout coordinates
+
+`assign_new_note_incremental()` uses these to place a new note in ~50–200ms
+without touching other notes. On the 20th new note, a full recluster is
+also fired as a background task to keep the model accurate over time.
+
+---
+
+### Where It Is Applied
+
+| File | Change |
+|---|---|
+| `backend/services/clustering.py` | Added `_fitted_reducer_2d` cache, `assign_new_note_incremental()` |
+| `backend/routes/notes.py` | Per-note save now calls incremental path; full recluster every 20 notes |
+
+---
+
+### Tradeoffs
+
+**Pros:**
+- Per-note assignment drops from ~8–15s to ~50–200ms
+- Full pipeline still runs periodically to prevent cluster drift
+- Falls back to full recluster automatically on cold cache (server restart)
+
+**Cons:**
+- Module-level model cache is lost on server restart (first note triggers full run)
+- `approximate_predict` may misclassify notes near cluster boundaries
+- Outlier notes (label = -1) accumulate until the next full recluster
+
+---
+
+### Expected Impact
+
+| Scenario | Before | After |
+|---|---|---|
+| New note (warm cache, 200 notes) | ~8–15s full pipeline | ~50–200ms incremental |
+| Every 20th note | ~8–15s | ~8–15s + instant assignment |
+| Cold cache / server restart | ~8–15s | ~8–15s (same) |
 
 ---
 

@@ -19,6 +19,19 @@ export default function GraphView({
     localDepth = 2,
     showEdgeTypes = { topic_link: true, semantic_link: true, tag_link: false, backlink: true },
 }) {
+    // ── Theme-aware canvas colors (CSS vars → resolved hex for Canvas API) ──
+    const cssVars = typeof window !== "undefined"
+        ? getComputedStyle(document.documentElement)
+        : null;
+    const CANVAS_BG = cssVars?.getPropertyValue("--bg-secondary").trim() || "#ffffff";
+    const CANVAS_NODE = cssVars?.getPropertyValue("--text-muted").trim() || "#A0A0B0";
+    const CANVAS_NODE_HOVER = cssVars?.getPropertyValue("--bg-card-hover").trim() || "#F9F9FB";
+    const CANVAS_LABEL = cssVars?.getPropertyValue("--text-secondary").trim() || "#6B6B80";
+    const CANVAS_LABEL_TOPIC = cssVars?.getPropertyValue("--accent-hover").trim() || "#6D28D9";
+    const CANVAS_OUTLIER = "#C4B5FD";   // muted purple
+    const CANVAS_RING = cssVars?.getPropertyValue("--accent").trim() || "#7C3AED";
+    const CANVAS_TAG_EDGE = "#C4B5FD";   // intentional soft purple
+
     const graphRef = useRef();
     const [hoveredNode, setHoveredNode] = useState(null);
     const [focusNode, setFocusNode] = useState(null);  // local graph center
@@ -135,8 +148,8 @@ export default function GraphView({
             : Math.max(3.5, Math.min(11, degree * 1.8 + 3.5));
 
         // Color
-        let baseColor = node.color || (isTopic ? "#7C3AED" : "#4B5563");
-        if (isOutlier) baseColor = "#374151";
+        let baseColor = node.color || (isTopic ? "#7C3AED" : CANVAS_NODE);
+        if (isOutlier) baseColor = CANVAS_OUTLIER;
 
         const alpha = isDimmed ? 0.15 : 1.0;
         ctx.globalAlpha = alpha;
@@ -163,13 +176,13 @@ export default function GraphView({
             gradient.addColorStop(1, baseColor);
             ctx.fillStyle = gradient;
         } else {
-            ctx.fillStyle = isHovered ? "#F9FAFB" : (isHighlighted ? lighten(baseColor, 0.4) : baseColor);
+            ctx.fillStyle = isHovered ? CANVAS_NODE_HOVER : (isHighlighted ? "#A78BFA" : baseColor);
         }
         ctx.fill();
 
         // Ring for selected focus node
         if (isFocused) {
-            ctx.strokeStyle = "#FFFFFF";
+            ctx.strokeStyle = CANVAS_RING;
             ctx.lineWidth = 1.5 / globalScale;
             ctx.stroke();
         }
@@ -186,7 +199,7 @@ export default function GraphView({
             ctx.font = `${isTopic ? 600 : 400} ${fontSize}px Inter, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
-            ctx.fillStyle = isTopic ? "#E9D5FF" : "#D1D5DB";
+            ctx.fillStyle = isTopic ? CANVAS_LABEL_TOPIC : CANVAS_LABEL;
             ctx.globalAlpha = isDimmed ? 0.1 : (isHighlighted ? 1 : 0.85);
             const label = node.label?.length > 28 ? node.label.slice(0, 26) + "…" : (node.label || "");
             ctx.fillText(label, node.x, node.y + size + 3);
@@ -202,7 +215,7 @@ export default function GraphView({
         const styles = {
             topic_link: { color: "#7C3AED", width: 1.2, opacity: 0.5 },
             semantic_link: { color: "#3B82F6", width: (link.weight || 0.75) * 2, opacity: 0.45 },
-            tag_link: { color: "#374151", width: 0.5, opacity: 0.2 },
+            tag_link: { color: CANVAS_TAG_EDGE, width: 0.5, opacity: 0.35 },
             backlink: { color: "#10B981", width: 1.2, opacity: 0.65 },
         };
         const s = styles[type] ?? { color: "#4B5563", width: 0.7, opacity: 0.25 };
@@ -220,7 +233,7 @@ export default function GraphView({
     }, [hlLinks]);
 
     return (
-        <div style={{ width: "100%", height: "100%", background: "#030712", borderRadius: 16, overflow: "hidden", position: "relative" }}>
+        <div style={{ width: "100%", height: "100%", background: "var(--bg-secondary)", borderRadius: 16, overflow: "hidden", position: "relative" }}>
             {/* Focus indicator */}
             {focusNode && (
                 <div style={{
@@ -247,8 +260,8 @@ export default function GraphView({
                 linkDirectionalParticles={link => (hlLinks.has(link) ? 3 : 0)}
                 linkDirectionalParticleSpeed={0.004}
                 linkDirectionalParticleWidth={2}
-                linkDirectionalParticleColor={link => link.type === "semantic_link" ? "#60A5FA" : "#A78BFA"}
-                backgroundColor="#030712"
+                linkDirectionalParticleColor={link => link.type === "semantic_link" ? "#3B82F6" : "#7C3AED"}
+                backgroundColor={CANVAS_BG}
                 cooldownTicks={200}
                 d3AlphaDecay={0.015}
                 d3VelocityDecay={0.3}

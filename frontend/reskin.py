@@ -39,7 +39,12 @@ def repl_colors(text):
         text = text.replace(k, v)
     return text
 
-for file in ["src/pages/ChatPage.jsx", "src/pages/TopicsPage.jsx", "src/pages/NotePage.jsx"]:
+for file in [
+    "src/pages/ChatPage.jsx",
+    "src/pages/TopicsPage.jsx",
+    "src/pages/NotePage.jsx",
+    "src/components/GraphView.jsx",
+]:
     with open(file, "r") as f:
         content = f.read()
     with open(file, "w") as f:
