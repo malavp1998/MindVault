@@ -26,6 +26,7 @@ export default function TopicsPage() {
         backlink: true,
     });
     const [semanticThreshold, setSemanticThreshold] = useState(75);
+    const [edgePanelMinimized, setEdgePanelMinimized] = useState(false);
     const navigate = useNavigate();
     const isFirstRender = useRef(true);
 
@@ -36,8 +37,8 @@ export default function TopicsPage() {
     }, []);
 
     useEffect(() => {
-        applyFilters(searchQuery, filterType);
-    }, [graphData, searchQuery, filterType]);
+        applyFilters(searchQuery, filterType, showEdgeTypes);
+    }, [graphData, searchQuery, filterType, showEdgeTypes]);
 
     async function loadGraph() {
         // Only show full-page spinner when we have no data at all
@@ -76,7 +77,7 @@ export default function TopicsPage() {
         return () => clearTimeout(timer);
     }, [semanticThreshold]);
 
-    function applyFilters(query, type) {
+    function applyFilters(query, type, edgeTypes) {
         const visibleNodes = graphData.nodes.filter((n) => {
             if (type === "topics" && n.type !== "topic") return false;
             if (type === "notes" && n.type !== "note") return false;
@@ -85,14 +86,34 @@ export default function TopicsPage() {
         });
         const visibleIds = new Set(visibleNodes.map((n) => n.id));
         const visibleLinks = graphData.links.filter(
-            (l) =>
-                visibleIds.has(l.source?.id ?? l.source) &&
-                visibleIds.has(l.target?.id ?? l.target)
+            (l) => {
+                // Determine edge visibility by both node presence and edge type toggle
+                const sourceVisible = visibleIds.has(l.source?.id ?? l.source);
+                const targetVisible = visibleIds.has(l.target?.id ?? l.target);
+
+                // Flexible type matching since API types ("semantic_link") might not match toggle keys exactly
+                let typeVisible = true;
+                const linkStr = l.type?.toLowerCase() || "";
+
+                if (linkStr.includes("topic")) {
+                    typeVisible = edgeTypes["topic_link"] !== false;
+                    // Strict override: Never show topic links if we are strictly filtering for notes-only
+                    if (type === "notes") typeVisible = false;
+                }
+                else if (linkStr.includes("semantic")) typeVisible = edgeTypes["semantic_link"] !== false;
+
+                return sourceVisible && targetVisible && typeVisible;
+            }
         );
         setFilteredData({ nodes: visibleNodes, links: visibleLinks });
     }
 
     const handleNodeClick = useCallback(async (node) => {
+        if (!node) {
+            setSelectedNode(null);
+            setSidePanel(null);
+            return;
+        }
         setSelectedNode(node);
         setSidePanelLoading(true);
         setSidePanel({ type: node.type, node, data: null });
@@ -206,60 +227,78 @@ export default function TopicsPage() {
                 <div style={{
                     position: "absolute", bottom: 16, left: 16, zIndex: 20,
                     background: "rgba(255,255,255,0.92)", border: "1px solid var(--border)",
-                    borderRadius: 12, padding: "14px 16px", fontSize: 12, color: "var(--text-muted)",
-                    display: "flex", flexDirection: "column", gap: 10,
-                    backdropFilter: "blur(8px)", minWidth: 200,
-                }}>
-                    <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 2 }}>Edge Types</div>
-
-                    {[
-                        { key: "topic_link", color: "#7C3AED", label: "Topic clusters" },
-                        { key: "semantic_link", color: "#3B82F6", label: "Semantic similarity" },
-                        { key: "tag_link", color: "var(--border)", label: "Shared tags" },
-                        { key: "backlink", color: "#10B981", label: "Backlinks" },
-                    ].map(({ key, color, label }) => (
-                        <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                            <input
-                                type="checkbox"
-                                checked={showEdgeTypes[key] !== false}
-                                onChange={e => setShowEdgeTypes(prev => ({ ...prev, [key]: e.target.checked }))}
-                                style={{ accentColor: color }}
-                            />
-                            <span style={{ width: 12, height: 2, background: color, display: "inline-block", borderRadius: 1 }} />
-                            <span>{label}</span>
-                        </label>
-                    ))}
-
-                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
-                        <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>
-                            Semantic threshold: {semanticThreshold}%
+                    borderRadius: 12, padding: edgePanelMinimized ? "10px 14px" : "14px 16px",
+                    fontSize: 12, color: "var(--text-muted)",
+                    display: "flex", flexDirection: "column", gap: edgePanelMinimized ? 0 : 10,
+                    backdropFilter: "blur(8px)", minWidth: edgePanelMinimized ? "auto" : 200,
+                    cursor: edgePanelMinimized ? "pointer" : "default",
+                    transition: "all 0.2s ease"
+                }} onClick={() => edgePanelMinimized && setEdgePanelMinimized(false)}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: edgePanelMinimized ? 0 : 2 }}>
+                            {edgePanelMinimized ? "⚙️ Edge Types" : "Edge Types"}
                         </div>
-                        <input
-                            type="range" min={60} max={95} value={semanticThreshold}
-                            onChange={e => setSemanticThreshold(Number(e.target.value))}
-                            style={{ width: "100%", accentColor: "#3B82F6" }}
-                        />
+                        {!edgePanelMinimized && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setEdgePanelMinimized(true); }}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 16 }}
+                                title="Minimize"
+                            >
+                                ↓
+                            </button>
+                        )}
                     </div>
 
-                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
-                        <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>Local graph depth</div>
-                        <div style={{ display: "flex", gap: 6 }}>
-                            {[1, 2, 3].map(d => (
-                                <button key={d} onClick={() => setLocalDepth(d)} style={{
-                                    padding: "4px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer",
-                                    background: localDepth === d ? "rgba(124,58,237,0.3)" : "transparent",
-                                    border: `1px solid ${localDepth === d ? "rgba(124,58,237,0.6)" : "var(--border)"}`,
-                                    color: localDepth === d ? "#A78BFA" : "var(--text-muted)",
-                                }}>
-                                    {d}
-                                </button>
+                    {!edgePanelMinimized && (
+                        <>
+                            {[
+                                { key: "topic_link", color: "#7C3AED", label: "Topic clusters" },
+                                { key: "semantic_link", color: "#3B82F6", label: "Semantic similarity" },
+                            ].map(({ key, color, label }) => (
+                                <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={showEdgeTypes[key] !== false}
+                                        onChange={e => setShowEdgeTypes(prev => ({ ...prev, [key]: e.target.checked }))}
+                                        style={{ accentColor: color }}
+                                    />
+                                    <span style={{ width: 12, height: 2, background: color, display: "inline-block", borderRadius: 1 }} />
+                                    <span>{label}</span>
+                                </label>
                             ))}
-                        </div>
-                    </div>
 
-                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, marginTop: 2, fontSize: 11, color: "var(--text-muted)" }}>
-                        Hover → highlight · Click → local graph · Right-click → open note
-                    </div>
+                            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
+                                <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>
+                                    Semantic threshold: {semanticThreshold}%
+                                </div>
+                                <input
+                                    type="range" min={60} max={95} value={semanticThreshold}
+                                    onChange={e => setSemanticThreshold(Number(e.target.value))}
+                                    style={{ width: "100%", accentColor: "#3B82F6" }}
+                                />
+                            </div>
+
+                            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 2 }}>
+                                <div style={{ color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>Local graph depth</div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                    {[1, 2, 3].map(d => (
+                                        <button key={d} onClick={() => setLocalDepth(d)} style={{
+                                            padding: "4px 12px", borderRadius: 8, fontSize: 12, cursor: "pointer",
+                                            background: localDepth === d ? "rgba(124,58,237,0.3)" : "transparent",
+                                            border: `1px solid ${localDepth === d ? "rgba(124,58,237,0.6)" : "var(--border)"}`,
+                                            color: localDepth === d ? "#A78BFA" : "var(--text-muted)",
+                                        }}>
+                                            {d}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6, marginTop: 2, fontSize: 11, color: "var(--text-muted)" }}>
+                                Hover → highlight · Click → local graph · Right-click → open note
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Empty state */}
@@ -299,6 +338,7 @@ export default function TopicsPage() {
                     localMode={localMode}
                     localDepth={localDepth}
                     showEdgeTypes={showEdgeTypes}
+                    filterType={filterType}
                 />
             </div>
 

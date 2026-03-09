@@ -6,7 +6,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Note, Topic, NoteLink, User
+from models import Note, Topic, User
 from middleware.auth import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/graph", tags=["graph"])
@@ -45,13 +45,6 @@ async def get_graph_data(
         )
     )
     notes = note_result.scalars().all()
-
-    backlink_result = await db.execute(
-        select(NoteLink).where(
-            NoteLink.source_id.in_([n.id for n in notes])
-        )
-    )
-    backlinks = backlink_result.scalars().all()
 
     # ── Build topic color map ────────────────────────────────────────
     topic_color_map: dict[str, int] = {}
@@ -171,39 +164,10 @@ async def get_graph_data(
                 "type": "topic_link",
             })
 
-        for tag in all_tags:
-            tag_map.setdefault(tag, []).append(graph_id)
-
     # Semantic links
     links.extend(semantic_links)
 
-    # Tag links
-    seen_tag: set[tuple] = set()
-    for tag, note_ids in tag_map.items():
-        for i in range(len(note_ids)):
-            for j in range(i + 1, len(note_ids)):
-                key = tuple(sorted([note_ids[i], note_ids[j]]))
-                if key not in seen_tag:
-                    links.append({
-                        "source": note_ids[i],
-                        "target": note_ids[j],
-                        "type": "tag_link",
-                        "shared_tag": tag,
-                    })
-                    seen_tag.add(key)
 
-    # Backlinks (from NoteLink model)
-    note_graph_ids = {str(n.id): f"note-{n.id}" for n in notes}
-    for bl in backlinks:
-        src = note_graph_ids.get(str(bl.source_id))
-        tgt = note_graph_ids.get(str(bl.target_id))
-        if src and tgt:
-            links.append({
-                "source": src,
-                "target": tgt,
-                "type": "backlink",
-                "weight": round(bl.similarity_score, 3),
-            })
 
     return {
         "nodes": nodes,
