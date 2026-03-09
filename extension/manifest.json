@@ -12,6 +12,8 @@
     "host_permissions": [
         "https://mindvault-wspy.onrender.com/*",
         "https://mind-vault-ecru.vercel.app/*",
+        "http://localhost:8000/*",
+        "http://localhost:5173/*",
         "https://www.youtube.com/*",
         "https://m.youtube.com/*",
         "https://music.youtube.com/*",

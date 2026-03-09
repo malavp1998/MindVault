@@ -1,5 +1,18 @@
-const API_BASE = "https://mindvault-wspy.onrender.com"
-const WEB_APP_URL = "https://mind-vault-ecru.vercel.app"
+const ENV = "local"; // Managed by sync-env.js
+
+const CONFIG = {
+    local: {
+        API_BASE: "http://localhost:8000",
+        WEB_APP_URL: "http://localhost:5173"
+    },
+    production: {
+        API_BASE: "https://mindvault-wspy.onrender.com",
+        WEB_APP_URL: "https://mind-vault-ecru.vercel.app"
+    }
+}
+
+const API_BASE = CONFIG[ENV].API_BASE;
+const WEB_APP_URL = CONFIG[ENV].WEB_APP_URL;
 
 // ── TOKEN MANAGEMENT ──────────────────────────────────
 

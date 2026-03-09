@@ -261,6 +261,7 @@ cp .env.example .env
 Fill in your `.env`:
 
 ```env
+APP_ENV=local
 GROQ_API_KEY=your_groq_key
 JINA_API_KEY=your_jina_key
 SARVAM_API_KEY=your_sarvam_key
@@ -318,9 +319,10 @@ make dev-frontend
 
 | Command          | Description                    |
 |------------------|--------------------------------|
-| `make up`        | Start full stack (foreground)  |
+| `make up`        | Start full stack (foreground) and sync extension |
 | `make up-detach` | Start full stack (background)  |
 | `make down`      | Stop all containers            |
+| `make sync-ext`  | Sync extension URLs to current APP_ENV |
 | `make logs`      | View backend logs              |
 | `make shell-db`  | Open a psql shell              |
 | `make test-smoke`| Run smoke tests                |
@@ -333,7 +335,7 @@ make dev-frontend
 4. Select the `extension/` folder
 5. Pin the MindVault icon to your toolbar
 
-> **Note:** For local development the extension points to `localhost:8000`. For production deployment, update `API_BASE` in `extension/background.js` and the register link in `extension/popup.html` to your production URLs.
+> **Note:** The extension environment is entirely controlled by `APP_ENV` (either `local` or `production`) in your `.env` file. Running `make up` or `make sync-ext` automatically configures the extension's URLs for you.
 
 ### Step 5 — Connect Claude Desktop (optional)
 
@@ -391,8 +393,8 @@ The frontend uses `VITE_API_URL` to route API calls to the Render backend in pro
 
 ### Chrome Extension
 
-1. Update `API_BASE` in `extension/background.js` to your Render URL
-2. Update register link in `extension/popup.html` to your Vercel URL
+1. Ensure your `.env` file has `APP_ENV=production` set.
+2. Run `make sync-ext` from the terminal. This automatically points your `background.js` and `popup.js` to the live `PROD_FRONTEND_URL` and `PROD_BACKEND_URL` from your `.env` file.
 3. Zip the `extension/` folder → upload to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
 4. Category: **Productivity**
 
@@ -590,6 +592,9 @@ Claude: [calls summarize_topic("topic-uuid")]
 
 | Variable               | Default                                               | Description                              |
 |------------------------|-------------------------------------------------------|------------------------------------------|
+| `APP_ENV`              | `local`                                               | Controls whether the frontend and extension use local Docker URLs or live Production URLs |
+| `PROD_BACKEND_URL`     | —                                                     | Production API base used when APP_ENV=production |
+| `PROD_FRONTEND_URL`    | —                                                     | Production Dashboard base used when APP_ENV=production |
 | `GROQ_API_KEY`         | —                                                     | Groq API key for LLM and Whisper         |
 | `LLM_ENGLISH_PRIMARY`  | `llama-3.3-70b-versatile`                             | Primary English model on Groq            |
 | `LLM_ENGLISH_FALLBACK` | `llama-3.1-8b-instant`                                | Fallback English model when primary limit hits |

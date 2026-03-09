@@ -1,7 +1,11 @@
 .PHONY: up down build logs shell-db test-smoke
 
+# Sync Extension Environment
+sync-ext:
+	cd extension && npm install && node sync-env.js
+
 # Start full stack
-up:
+up: sync-ext
 	docker compose up --build
 
 # Start in background

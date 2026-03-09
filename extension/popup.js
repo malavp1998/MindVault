@@ -1,3 +1,17 @@
+// ── CONFIG ────────────────────────────────────────────
+const ENV = "local"; // Managed by sync-env.js
+
+const CONFIG = {
+    local: {
+        WEB_APP_URL: "http://localhost:5173"
+    },
+    production: {
+        WEB_APP_URL: "https://mind-vault-ecru.vercel.app"
+    }
+}
+
+const WEB_APP_URL = CONFIG[ENV].WEB_APP_URL;
+
 // ── STATE ─────────────────────────────────────────────
 let currentTab = null
 let isYoutube = false
@@ -81,7 +95,7 @@ function setupLoginListeners() {
                 await new Promise(r => setTimeout(r, 400))
                 const retry = await sendMessage({ type: "OPEN_WEB_APP" })
                 if (!retry) {
-                    chrome.tabs.create({ url: "https://mind-vault-ecru.vercel.app/login" })
+                    chrome.tabs.create({ url: `${WEB_APP_URL}/login` })
                 }
             }
         })
@@ -298,7 +312,7 @@ async function handleSummarizeYoutube() {
                 linkEl.textContent = "→ Open in vault"
                 linkEl.addEventListener("click", () => {
                     chrome.tabs.create({
-                        url: `https://mind-vault-ecru.vercel.app/note/${note.id}`
+                        url: `${WEB_APP_URL}/note/${note.id}`
                     })
                 })
                 resultEl.appendChild(linkEl)
@@ -411,7 +425,7 @@ function createNoteCard(note, similarity) {
     // open note in dashboard on click
     card.addEventListener("click", () => {
         chrome.tabs.create({
-            url: `https://mind-vault-ecru.vercel.app/note/${note.id}`
+            url: `${WEB_APP_URL}/note/${note.id}`
         })
     })
     return card

@@ -52,6 +52,9 @@ async def init_db():
         # firebase_uid migration for existing users table
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128)"))
         await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_firebase_uid ON users(firebase_uid)"))
+        
+        # Drop old unique constraint on cluster_id causing recluster crashes for existing DBs
+        await conn.execute(text("ALTER TABLE topics DROP CONSTRAINT IF EXISTS topics_cluster_id_key"))
 
 
 async def get_db() -> AsyncSession:
