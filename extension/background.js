@@ -159,7 +159,7 @@ async function saveNote(content, title, sourceUrl, annotation, userTags) {
         ? `${annotation}\n\n${content}`
         : content
 
-    return await apiCall("/api/notes", {
+    const response = await apiCall("/api/notes", {
         method: "POST",
         body: JSON.stringify({
             content: finalContent,
@@ -168,6 +168,13 @@ async function saveNote(content, title, sourceUrl, annotation, userTags) {
             user_tags: userTags || []
         })
     })
+
+    // If backend returns 409, surface it as a duplicate flag
+    if (response?.status === 409 || response?.data?.detail?.includes("already exists")) {
+        return { duplicate: true, message: "Already saved in your vault!" }
+    }
+
+    return response
 }
 
 async function getRelatedNotes(url, content) {
@@ -216,14 +223,19 @@ async function handleMessage(message) {
         case "LOGOUT":
             return await logout()
 
-        case "SAVE_NOTE":
-            return await saveNote(
+        case "SAVE_NOTE": {
+            const result = await saveNote(
                 message.content,
                 message.title,
                 message.sourceUrl,
                 message.annotation,
                 message.userTags
             )
+            if (result?.duplicate) {
+                return { success: false, duplicate: true, message: result.message }
+            }
+            return result
+        }
 
         case "GET_RELATED":
             return await getRelatedNotes(message.url, message.content)

@@ -225,27 +225,21 @@ async function handleSavePage() {
     btn.disabled = false
     btn.textContent = "💾 Save to Vault"
 
+    if (result?.duplicate) {
+        showStatus("⚠️ Already in your vault!", "warning")
+        return
+    }
+
     if (result?.ok) {
         const note = result.data
-        document.getElementById("save-form").classList.add("hidden")
-        const resultEl = document.getElementById("save-result")
-        resultEl.classList.remove("hidden")
 
         // show auto generated tags
-        const tagsEl = document.getElementById("result-tags")
         const allTags = [
             ...(note.auto_tags || []).map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`),
             ...(note.user_tags || []).map(t => `<span class="tag tag-user">${escapeHtml(t)}</span>`)
         ]
-        tagsEl.innerHTML = allTags.join("")
 
-        // reset after 3 seconds
-        setTimeout(() => {
-            document.getElementById("save-form").classList.remove("hidden")
-            resultEl.classList.add("hidden")
-            document.getElementById("annotation").value = ""
-            document.getElementById("user-tags").value = ""
-        }, 3000)
+        showStatus("✅ Saved to Vault!", "success", allTags.join(""))
     } else if (result?.status === 401) {
         showScreen("login")
     }
@@ -440,6 +434,35 @@ function escapeHtml(str) {
 function showError(el, msg) {
     el.textContent = msg
     el.classList.remove("hidden")
+}
+
+function showStatus(msg, type = "success", tagsHtml = "") {
+    document.getElementById("save-form").classList.add("hidden")
+    const resultEl = document.getElementById("save-result")
+    resultEl.classList.remove("hidden")
+
+    if (type === "warning") {
+        resultEl.innerHTML = `
+            <div class="result-warning" style="display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.2); color: #f59e0b; width: 100%; box-sizing: border-box;">
+                <span style="font-weight: 500;">${msg}</span>
+            </div>
+        `
+    } else {
+        resultEl.innerHTML = `
+            <div class="result-success">
+                <span>${msg}</span>
+                <div id="result-tags" class="tags">${tagsHtml}</div>
+            </div>
+        `
+    }
+
+    // reset after 3 seconds
+    setTimeout(() => {
+        document.getElementById("save-form").classList.remove("hidden")
+        resultEl.classList.add("hidden")
+        document.getElementById("annotation").value = ""
+        document.getElementById("user-tags").value = ""
+    }, 3000)
 }
 
 // ── MESSAGE HELPER ────────────────────────────────────

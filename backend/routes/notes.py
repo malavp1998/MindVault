@@ -45,6 +45,20 @@ async def create_note(
         run.metadata["user_id"] = str(current_user.id)
         run.metadata["username"] = current_user.email or "unknown"
 
+    # Duplicate guard — if a note from this URL already exists for this user, reject it
+    if body.source_url:
+        existing = await db.execute(
+            select(Note).where(
+                Note.source_url == body.source_url,
+                Note.user_id == current_user.id
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409,
+                detail="A note from this URL already exists in your vault."
+            )
+
     content = body.content
     if body.annotation:
         content = f"[User Annotation]: {body.annotation}\n\n{content}"
