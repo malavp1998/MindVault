@@ -10,6 +10,7 @@ export default function TopicsPage() {
     const [graphData, setGraphData] = useState({ nodes: [], links: [] });
     const [filteredData, setFilteredData] = useState({ nodes: [], links: [] });
     const [loading, setLoading] = useState(true);
+    const abortRef = useRef(null);
     const [selectedNode, setSelectedNode] = useState(null);
     const [sidePanel, setSidePanel] = useState(null);
     const [sidePanelLoading, setSidePanelLoading] = useState(false);
@@ -30,6 +31,8 @@ export default function TopicsPage() {
 
     useEffect(() => {
         loadGraph();
+        // Cleanup: cancel in-flight request (important for StrictMode double-mount)
+        return () => { abortRef.current?.abort(); };
     }, []);
 
     useEffect(() => {
@@ -37,16 +40,29 @@ export default function TopicsPage() {
     }, [graphData, searchQuery, filterType]);
 
     async function loadGraph() {
-        setLoading(true);
+        // Only show full-page spinner when we have no data at all
+        if (graphData.nodes.length === 0) {
+            setLoading(true);
+        }
+        // Cancel any previous in-flight request
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         try {
-            const res = await api.get(`/graph/data?semantic_threshold=${semanticThreshold / 100}`);
+            const res = await api.get(
+                `/graph/data?semantic_threshold=${semanticThreshold / 100}`,
+                { signal: controller.signal }
+            );
             const data = res.data;
             setGraphData(data);
             setFilteredData(data);
         } catch (err) {
+            if (err.name === 'AbortError' || err.name === 'CanceledError') return;
             console.error("Failed to load graph data:", err);
         } finally {
-            setLoading(false);
+            if (!controller.signal.aborted) {
+                setLoading(false);
+            }
         }
     }
 
@@ -113,7 +129,7 @@ export default function TopicsPage() {
     const topicCount = graphData.nodes.filter((n) => n.type === "topic").length;
     const noteCount = graphData.nodes.filter((n) => n.type === "note").length;
 
-    if (loading) {
+    if (loading && graphData.nodes.length === 0) {
         return (
             <div className="loading-container">
                 <div className="spinner" />
