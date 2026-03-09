@@ -567,6 +567,8 @@ Returns full node and link data for the Obsidian-style graph view.
 | `get_related(note_id)`        | Get linked notes                     |
 | `list_topics()`               | List all topic clusters              |
 | `summarize_topic(topic_id)`   | Generate topic summary               |
+| `chat_with_vault(message)`    | Native Q&A via LangGraph RAG agent |
+| `get_due_reviews()`           | Fetch daily spaced-repetition queue  |
 
 ### Example Claude Desktop Interactions
 
@@ -580,10 +582,13 @@ Claude: [calls list_topics()]
         You have 6 topic clusters: Deep Learning (12 notes),
         Python Development (8 notes), System Design (5 notes)...
 
-You: Summarize my Deep Learning topic
-Claude: [calls summarize_topic("topic-uuid")]
-        Your Deep Learning notes cover: attention mechanisms,
-        backpropagation, transformer architecture...
+You: Ask MindVault: what are the key differences between SQL and NoSQL based on my notes?
+Claude: [calls chat_with_vault("what are the key differences between SQL and NoSQL...")]
+        Based on your notes, SQL databases are relational...
+
+You: Fetch my due reviews from MindVault and quiz me on the first one.
+Claude: [calls get_due_reviews()]
+        You have 5 notes due today. Let's start with 'System Design'. What is...
 ```
 
 ---

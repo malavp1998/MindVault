@@ -29,6 +29,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+mcp_app = mcp.streamable_http_app()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database on startup."""
@@ -59,7 +61,10 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     logger.info("📅 APScheduler started with update_retention_scores job")
     
-    yield
+    # Initialize FastMCP SSE manager lifespan
+    async with mcp_app.router.lifespan_context(mcp_app):
+        yield
+
     scheduler.shutdown()
     logger.info("👋 MindVault shutting down")
 
@@ -95,8 +100,8 @@ app.include_router(cache_router, prefix="/api")
 from routes.revision import router as revision_router
 app.include_router(revision_router, prefix="/api")
 
-# MCP server mount
-app.mount("/mcp", mcp.streamable_http_app())
+# MCP server direct route injection instead of mount to avoid /mcp/mcp duplication
+app.routes.extend(mcp_app.routes)
 
 
 @app.get("/")

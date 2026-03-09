@@ -186,21 +186,20 @@ export default function VaultPage() {
                 title: newNoteTitle.trim() || "Untitled Note",
                 content: newNoteContent.trim(),
                 user_tags: extractedTags,
-                source_url: "MindVault Web"
+                source_url: `MindVault Web (${Date.now()})`
             });
 
             // Add new note to the top of the local state array
             setNotes([newNote, ...notes]);
-
-            // Reset form UI
-            setIsCreatingNote(false);
-            setNewNoteTitle('');
-            setNewNoteContent('');
-            setExtractedTags([]);
         } catch (err) {
             console.error("Failed to create note:", err);
             alert("Failed to save note. Please try again.");
         } finally {
+            // Reset form UI regardless of success or failure
+            setIsCreatingNote(false);
+            setNewNoteTitle('');
+            setNewNoteContent('');
+            setExtractedTags([]);
             setIsSaving(false);
         }
     };

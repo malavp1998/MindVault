@@ -10,6 +10,8 @@ from schemas import NoteCreate
 from services.embedding import get_embedding
 from services.llm import synthesize_answer
 from services.pipeline import process_note
+from services.agent import rag_agent
+from services.revision_selector import get_revision_queue
 from sqlalchemy import select, text
 
 # Create the MCP server
@@ -33,10 +35,10 @@ async def search_vault(query: str, top_k: int = 5) -> str:
         result = await db.execute(
             text("""
                 SELECT id, title, summary, source_url,
-                       1 - (embedding <=> :emb::vector) as similarity
+                       1 - (embedding <=> CAST(:emb AS vector)) as similarity
                 FROM notes
                 WHERE embedding IS NOT NULL
-                ORDER BY embedding <=> :emb::vector
+                ORDER BY embedding <=> CAST(:emb AS vector)
                 LIMIT :top_k
             """),
             {"emb": str(query_embedding), "top_k": top_k},
@@ -197,3 +199,78 @@ async def summarize_topic(topic_id: str) -> str:
         return f"Failed to generate summary: {e}"
 
     return f"📋 **Topic: {topic.name}** ({topic.note_count} notes)\n\n{summary}"
+
+
+@mcp.tool()
+async def chat_with_vault(message: str, user_id: str) -> str:
+    """Chat with the entire vault using a RAG agent. The agent will intelligently search notes to answer questions.
+    
+    Args:
+        message: The question or message to ask the vault.
+        user_id: The UUID of the user. MUST provide this to scope the search context.
+        
+    Returns:
+        The synthesized answer with citations to the source notes used.
+    """
+    try:
+        uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+        
+    initial_state = {
+        "query": message,
+        "retrieved_notes": [],
+        "final_answer": "",
+        "sources": [],
+        "user_id": user_id,
+    }
+    
+    try:
+        final_state = await rag_agent.ainvoke(initial_state)
+        answer = final_state.get("final_answer", "")
+        sources = final_state.get("sources", [])
+        
+        response = answer + "\n\n"
+        if sources:
+            response += "Sources used:\n"
+            for s in sources:
+                response += f"- {s.note.title} (ID: {s.note.id})\n"
+                
+        return response
+    except Exception as e:
+        return f"Agent failed to answer: {e}"
+
+
+@mcp.tool()
+async def get_due_reviews(user_id: str) -> str:
+    """Get the notes that are due for spaced repetition review today.
+    
+    Args:
+        user_id: The UUID of the user. MUST provide this to fetch their specific queue.
+        
+    Returns:
+        A list of notes (with titles and content snippets) that the user needs to review today.
+    """
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+        
+    async with async_session() as db:
+        notes = await get_revision_queue(db, uid)
+        
+    if not notes:
+        return "🎉 You're all caught up! No notes due for review today."
+        
+    results = [f"📚 **Due for Review Today ({len(notes)} notes)**\n"]
+    for note in notes:
+        # Notes returned by get_revision_queue are dictionaries based on the NoteOut schema
+        results.append(
+            f"📝 **{note.get('title', 'Unknown')}** (ID: {note.get('id', 'Unknown')})\n"
+            f"   Tags: {', '.join(note.get('tags') or [])}\n"
+            f"   Content Preview: {note.get('content', '')[:300]}...\n"
+        )
+        
+    results.append("\nTip: Ask me to quiz you on one of these notes!")
+    return "\n\n".join(results)
+
