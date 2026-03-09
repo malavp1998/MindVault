@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import GraphView from "../components/GraphView";
 import { api } from "../api";
@@ -26,6 +26,7 @@ export default function TopicsPage() {
     });
     const [semanticThreshold, setSemanticThreshold] = useState(75);
     const navigate = useNavigate();
+    const isFirstRender = useRef(true);
 
     useEffect(() => {
         loadGraph();
@@ -50,6 +51,11 @@ export default function TopicsPage() {
     }
 
     useEffect(() => {
+        // Skip on initial mount – the [] effect already calls loadGraph()
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
         const timer = setTimeout(() => loadGraph(), 600);
         return () => clearTimeout(timer);
     }, [semanticThreshold]);

@@ -216,9 +216,47 @@ export default function VaultPage() {
 
     return (
         <div>
-            <div className="page-header">
-                <h1>📚 Your Vault</h1>
-                <p>{notes.length} notes saved • {topics.length} topics discovered</p>
+            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h1>📚 Your Vault</h1>
+                    <p>{notes.length} notes saved • {topics.length} topics discovered</p>
+                </div>
+                <button
+                    onClick={() => setIsCreatingNote(!isCreatingNote)}
+                    style={{
+                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+                        color: isCreatingNote ? '#ef4444' : '#fff',
+                        border: isCreatingNote ? '1px solid rgba(239, 68, 68, 0.3)' : 'none',
+                        padding: '10px 18px',
+                        borderRadius: 10,
+                        fontWeight: 600,
+                        fontSize: 14,
+                        boxShadow: isCreatingNote ? 'none' : '0 4px 12px rgba(139, 92, 246, 0.25)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all 0.2s ease',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                    }}
+                    onMouseOver={(e) => {
+                        if (!isCreatingNote) {
+                            e.currentTarget.style.opacity = '0.9';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.35)';
+                        }
+                    }}
+                    onMouseOut={(e) => {
+                        if (!isCreatingNote) {
+                            e.currentTarget.style.opacity = '1';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.25)';
+                        }
+                    }}
+                >
+                    {isCreatingNote ? "✕ Cancel" : "✨ Create New Note"}
+                </button>
             </div>
 
             {/* Filters */}
@@ -251,7 +289,7 @@ export default function VaultPage() {
 
                 {/* Topic filter chips */}
                 {topics.length > 0 && (
-                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, flex: 1 }}>
                         <button
                             className={`topic-chip ${!selectedTopic ? 'active' : ''}`}
                             onClick={() => setSelectedTopic(null)}
@@ -269,42 +307,6 @@ export default function VaultPage() {
                         ))}
                     </div>
                 )}
-
-                <button
-                    onClick={() => setIsCreatingNote(!isCreatingNote)}
-                    style={{
-                        marginLeft: 'auto',
-                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
-                        color: isCreatingNote ? '#ef4444' : '#fff',
-                        border: 'none',
-                        padding: '10px 18px',
-                        borderRadius: 10,
-                        fontWeight: 600,
-                        fontSize: 14,
-                        boxShadow: isCreatingNote ? 'none' : '0 4px 12px rgba(139, 92, 246, 0.25)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        transition: 'all 0.2s ease'
-                    }}
-                    onMouseOver={(e) => {
-                        if (!isCreatingNote) {
-                            e.currentTarget.style.opacity = '0.9';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.35)';
-                        }
-                    }}
-                    onMouseOut={(e) => {
-                        if (!isCreatingNote) {
-                            e.currentTarget.style.opacity = '1';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.25)';
-                        }
-                    }}
-                >
-                    {isCreatingNote ? "✕ Cancel" : "✨ Create New Note"}
-                </button>
             </div>
 
             {/* Create Note Inline Form */}
