@@ -286,14 +286,22 @@ export default function GraphView({
                 cooldownTicks={150}
                 d3AlphaDecay={0.04}
                 d3VelocityDecay={0.6}
-                // Stronger repulsion for more spread
-                d3Force="charge"
                 nodeRelSize={1}
                 onEngineStop={() => {
                     // Pin all nodes at their settled positions
-                    graphRef.current?.graphData().nodes.forEach(n => {
-                        n.fx = n.x;
-                        n.fy = n.y;
+                    // Using requestAnimationFrame to prevent race condition with d3-force tick resulting in NaN coordinates
+                    requestAnimationFrame(() => {
+                        const graphData = graphRef.current?.graphData();
+                        if (graphData && graphData.nodes) {
+                            graphData.nodes.forEach(n => {
+                                if (Number.isFinite(n.x) && Number.isFinite(n.y)) {
+                                    n.fx = n.x;
+                                    n.fy = n.y;
+                                    n.vx = 0;
+                                    n.vy = 0;
+                                }
+                            });
+                        }
                     });
                 }}
             />
