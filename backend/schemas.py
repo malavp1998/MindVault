@@ -24,6 +24,11 @@ class NoteYoutubeCreate(BaseModel):
     title: str | None = Field(None, description="Video title from client")
 
 
+class NoteUpdate(BaseModel):
+    title: str | None = Field(None, max_length=500)
+    content: str | None = None
+
+
 class YoutubeSummarizeRequest(BaseModel):
     transcript: str
     video_url: str

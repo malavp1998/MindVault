@@ -15,7 +15,7 @@ from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
     RelatedNotesResponse, NoteYoutubeCreate,
-    YoutubeSummarizeRequest, TagUpdate, SuggestTagsResponse
+    YoutubeSummarizeRequest, TagUpdate, SuggestTagsResponse, NoteUpdate
 )
 from services.embedding import get_embedding
 from services.llm import summarize_youtube_video
@@ -585,6 +585,39 @@ async def suggest_note_tags(
         
     suggestions = await generate_tags(note.content, note.language)
     return SuggestTagsResponse(suggested_tags=suggestions)
+
+
+@router.patch("/{note_id}", response_model=NoteOut)
+async def update_note(
+    note_id: uuid.UUID,
+    body: NoteUpdate,
+    background_tasks: BackgroundTasks,
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a note's title and/or content — must belong to current user."""
+    note = await db.get(Note, note_id)
+    if not note or note.user_id != current_user.id:
+        raise HTTPException(404, "Note not found")
+        
+    needs_reprocessing = False
+    
+    if body.title is not None and body.title != note.title:
+        note.title = body.title
+        needs_reprocessing = True
+    if body.content is not None and body.content != note.content:
+        note.content = body.content
+        needs_reprocessing = True
+        
+    if needs_reprocessing:
+        note.is_processed = False
+        
+    await db.commit()
+    
+    if needs_reprocessing:
+        background_tasks.add_task(process_note, note.id)
+
+    return await _note_with_backlinks(db, note)
 
 
 # ─── Helpers ────────────────────────────────────────────────────

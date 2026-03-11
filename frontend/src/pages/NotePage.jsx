@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getNote, processNote, deleteNote, api } from '../api';
+import { getNote, updateNote, processNote, deleteNote, api } from '../api';
 import ReactMarkdown from 'react-markdown';
 
 export default function NotePage() {
@@ -9,6 +9,12 @@ export default function NotePage() {
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Edit state
+    const [isEditing, setIsEditing] = useState(false);
+    const [editTitle, setEditTitle] = useState('');
+    const [editContent, setEditContent] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     // Tag management state
     const [showTagInput, setShowTagInput] = useState(false);
@@ -60,6 +66,27 @@ export default function NotePage() {
             console.error('Failed to delete note:', err);
             alert("Failed to delete note. Please try again.");
             setIsDeleting(false);
+        }
+    }
+
+    // --- Edit handlers ---
+    function handleStartEdit() {
+        setEditTitle(note.title);
+        setEditContent(note.content);
+        setIsEditing(true);
+    }
+
+    async function handleSaveEdit() {
+        setIsSaving(true);
+        try {
+            const updated = await updateNote(id, { title: editTitle, content: editContent });
+            setNote(updated);
+            setIsEditing(false);
+        } catch (err) {
+            console.error('Failed to update note:', err);
+            alert("Failed to save changes. Please try again.");
+        } finally {
+            setIsSaving(false);
         }
     }
 
@@ -151,7 +178,16 @@ export default function NotePage() {
                     ← Back
                 </button>
 
-                <h1 className="note-detail-title">{note.title}</h1>
+                {isEditing ? (
+                    <input
+                        className="note-title-input"
+                        value={editTitle}
+                        onChange={e => setEditTitle(e.target.value)}
+                        style={{ width: '100%', fontSize: '2em', fontWeight: 'bold', marginBottom: '8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px' }}
+                    />
+                ) : (
+                    <h1 className="note-detail-title">{note.title}</h1>
+                )}
 
                 <div className="note-detail-meta">
                     <span>📅 {new Date(note.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
@@ -175,7 +211,7 @@ export default function NotePage() {
                     </button>
                     <button
                         onClick={handleDelete}
-                        disabled={isDeleting}
+                        disabled={isDeleting || isSaving}
                         style={{
                             background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.5)',
                             color: '#ef4444', padding: '4px 12px', borderRadius: 6,
@@ -184,6 +220,18 @@ export default function NotePage() {
                     >
                         {isDeleting ? '⏳ Deleting...' : '🗑️ Delete'}
                     </button>
+                    {!isEditing && (
+                        <button
+                            onClick={handleStartEdit}
+                            style={{
+                                background: 'var(--bg-card-hover)', border: '1px solid var(--border)',
+                                color: 'var(--text-primary)', padding: '4px 12px', borderRadius: 6,
+                                marginLeft: 8, fontSize: 12, cursor: 'pointer',
+                            }}
+                        >
+                            ✏️ Edit
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -308,7 +356,41 @@ export default function NotePage() {
             {/* Content */}
             <div className="note-section">
                 <h3 className="note-section-title">📄 Content</h3>
-                <div className="note-detail-content">{note.content}</div>
+                {isEditing ? (
+                    <div style={{ marginBottom: 16 }}>
+                        <textarea
+                            value={editContent}
+                            onChange={e => setEditContent(e.target.value)}
+                            style={{ width: '100%', minHeight: '300px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
+                        />
+                        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                            <button
+                                onClick={handleSaveEdit}
+                                disabled={isSaving}
+                                style={{
+                                    background: 'var(--accent)', color: '#fff', border: 'none',
+                                    padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
+                                    fontWeight: 500
+                                }}
+                            >
+                                {isSaving ? 'Saving...' : '💾 Save Changes'}
+                            </button>
+                            <button
+                                onClick={() => setIsEditing(false)}
+                                disabled={isSaving}
+                                style={{
+                                    background: 'var(--bg-card-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
+                                    padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
+                                    fontWeight: 500
+                                }}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="note-detail-content">{note.content}</div>
+                )}
             </div>
 
             {/* Backlinks */}
