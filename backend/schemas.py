@@ -73,6 +73,7 @@ class NoteOut(BaseModel):
 class NoteListOut(BaseModel):
     id: UUID
     title: str
+    content: str | None = None
     summary: str | None = None
     tags: list[str] | None = []
     auto_tags: list[str] = []
@@ -84,6 +85,9 @@ class NoteListOut(BaseModel):
     is_processed: bool = False
     processed: bool = False
     created_at: datetime
+    updated_at: datetime | None = None
+    backlink_count: int = 0
+    view_count: int = 0
     estimated_retention: float | None = None
 
     model_config = {"from_attributes": True}

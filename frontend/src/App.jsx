@@ -10,6 +10,7 @@ import NotePage from './pages/NotePage';
 import SearchPage from './pages/SearchPage';
 import ChatPage from './pages/ChatPage';
 import RevisionPage from './pages/RevisionPage';
+import AIStorePage from './pages/AIStorePage';
 import api from './api';
 
 function Sidebar() {
@@ -62,6 +63,34 @@ function Sidebar() {
                 ))}
             </div>
 
+            {/* Coming Soon Banner & Divider */}
+            <div>
+                <NavLink to="/ai-store" style={{ textDecoration: 'none' }}>
+                    <div style={{
+                        margin: "0 10px 8px 10px",
+                        padding: "10px 14px",
+                        background: "linear-gradient(135deg, #F5F3FF, #FAF5FF)",
+                        border: "1px solid rgba(124,58,237,0.2)",
+                        borderRadius: 12,
+                        cursor: "pointer",
+                        position: "relative"
+                    }}>
+                        {/* Pulsing Dot */}
+                        <div style={{
+                            width: 8, height: 8, borderRadius: "50%", background: "#7C3AED",
+                            position: "absolute", top: 8, right: 8,
+                            animation: "pulse 2s infinite"
+                        }} />
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED" }}>AI Store</div>
+                        <div style={{ fontSize: 11, color: "#A78BFA", marginTop: 2 }}>Agents & tools for your brain</div>
+                        <style>
+                            {`@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.4); } 100% { transform: scale(1); } }`}
+                        </style>
+                    </div>
+                </NavLink>
+                <div style={{ margin: "10px 14px", borderTop: "1px solid #E5E5EA" }} />
+            </div>
+
             <div style={{ position: "relative" }}>
                 {menuOpen && (
                     <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 10, right: 10, background: "#fff", border: "1px solid #E5E5EA", borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.10)", overflow: "hidden", zIndex: 200 }}>
@@ -108,6 +137,7 @@ function AuthenticatedLayout() {
                     <Route path="/note/:id" element={<NotePage />} />
                     <Route path="/search" element={<SearchPage />} />
                     <Route path="/chat" element={<ChatPage />} />
+                    <Route path="/ai-store" element={<AIStorePage />} />
                 </Routes>
             </main>
         </div>

@@ -26,8 +26,11 @@ from services.transcription import transcribe_youtube, transcribe_audio_file
 from services.tagging import generate_tags
 from middleware.auth import get_current_user, CurrentUser
 from langsmith.run_helpers import get_current_run_tree
+from config import get_settings
 import urllib.parse
 import yt_dlp
+
+settings = get_settings()
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -285,8 +288,15 @@ async def list_notes(
     db: AsyncSession = Depends(get_db),
 ):
     """List all notes with optional filters — scoped to current user."""
+    backlink_subquery = (
+        select(func.count(NoteLink.id))
+        .where(NoteLink.target_id == Note.id)
+        .correlate(Note)
+        .scalar_subquery()
+    )
+
     query = (
-        select(Note, NoteMemoryState.estimated_retention)
+        select(Note, NoteMemoryState.estimated_retention, NoteMemoryState.review_count, backlink_subquery.label("backlink_count"))
         .outerjoin(NoteMemoryState, (Note.id == NoteMemoryState.note_id) & (NoteMemoryState.user_id == current_user.id))
         .where(Note.user_id == current_user.id)
         .order_by(Note.created_at.desc())
@@ -304,10 +314,11 @@ async def list_notes(
     rows = result.all()
 
     out = []
-    for n, retention in rows:
+    for n, retention, review_count, backlinks in rows:
         item = NoteListOut(
             id=n.id,
             title=n.title,
+            content=n.content,
             summary=n.summary,
             tags=n.tags,
             auto_tags=n.auto_tags,
@@ -319,6 +330,9 @@ async def list_notes(
             is_processed=n.is_processed,
             processed=n.processed,
             created_at=n.created_at,
+            updated_at=n.updated_at,
+            backlink_count=backlinks or 0,
+            view_count=review_count or 0,
             estimated_retention=retention,
         )
         if n.topic_id:
@@ -356,10 +370,11 @@ async def search_notes(
             FROM notes
             WHERE embedding IS NOT NULL
               AND user_id = CAST(:uid AS uuid)
+              AND 1 - (embedding <=> CAST(:emb AS vector)) >= :threshold
             ORDER BY embedding <=> CAST(:emb AS vector)
             LIMIT :top_k
         """),
-        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id)},
+        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id), "threshold": settings.search_similarity_threshold},
     )
     rows = result.all()
 
@@ -453,10 +468,17 @@ async def get_related_notes(
                     FROM notes
                     WHERE id != :note_id AND embedding IS NOT NULL
                       AND user_id = CAST(:uid AS uuid)
+                      AND 1 - (embedding <=> CAST(:emb AS vector)) >= :threshold
                     ORDER BY embedding <=> CAST(:emb AS vector)
                     LIMIT :top_k
                 """),
-                {"emb": str(list(existing.embedding)), "note_id": str(existing.id), "top_k": top_k, "uid": str(current_user.id)},
+                {
+                 "emb": str(list(existing.embedding)), 
+                 "note_id": str(existing.id), 
+                 "top_k": top_k, 
+                 "uid": str(current_user.id),
+                 "threshold": settings.search_similarity_threshold
+                },
             )
             rows = result.all()
             return RelatedNotesResponse(notes=[
@@ -481,10 +503,11 @@ async def get_related_notes(
             FROM notes
             WHERE embedding IS NOT NULL
               AND user_id = CAST(:uid AS uuid)
+              AND 1 - (embedding <=> CAST(:emb AS vector)) >= :threshold
             ORDER BY embedding <=> CAST(:emb AS vector)
             LIMIT :top_k
         """),
-        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id)},
+        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id), "threshold": settings.search_similarity_threshold},
     )
     rows = result.all()
 

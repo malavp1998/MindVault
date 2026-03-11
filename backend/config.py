@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     cache_ttl_rag_hours: int = 6
     cache_ttl_chat_hours: int = 1
 
+    # Search Settings
+    search_similarity_threshold: float = 0.50
+
     # App
     backend_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:5173"
