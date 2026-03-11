@@ -896,3 +896,152 @@ a:hover {
     text-decoration: underline;
     cursor: pointer;
 }
+
+/* ─── Confirmation Card ───────────────────────────────────────── */
+.confirmation-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 8px 0;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: fadeInUp 0.3s ease;
+}
+
+.confirmation-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.confirmation-icon {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.confirmation-message {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.diff-container {
+    background: var(--bg-primary);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.diff-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: block;
+}
+
+.diff-before pre, .diff-after pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+
+.diff-before {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.05);
+    padding: 8px;
+    border-radius: 6px;
+}
+
+.diff-after {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.05);
+    padding: 8px;
+    border-radius: 6px;
+}
+
+.diff-delete-warning {
+    color: #ef4444;
+    font-weight: 500;
+    font-size: 12px;
+}
+
+.confirmation-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.btn-allow, .btn-deny {
+    flex: 1;
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.btn-allow {
+    background: #10b981;
+    color: white;
+}
+
+.btn-allow:hover:not(:disabled) {
+    background: #059669;
+}
+
+.btn-deny {
+    background: var(--bg-card-hover);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.btn-deny:hover:not(:disabled) {
+    background: #fee2e2;
+    color: #ef4444;
+    border-color: #fca5a5;
+}
+
+.btn-allow:disabled, .btn-deny:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.confirmation-result {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    animation: fadeInUp 0.3s ease;
+}
+
+.confirmation-result.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.confirmation-result.denied {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}

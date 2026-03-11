@@ -331,3 +331,19 @@ class UserRevisionStat(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc)
     )
+import uuid
+from datetime import datetime, timedelta
+from sqlalchemy import Column, String, DateTime, JSON
+from sqlalchemy.dialects.postgresql import UUID
+from database import Base
+
+class PendingAgentAction(Base):
+    __tablename__ = "pending_agent_actions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, nullable=False, index=True)
+    action_type = Column(String, nullable=False)   # create_note | update_note | delete_note | bulk_tag | merge_notes
+    payload = Column(JSON, nullable=False)          # full action data — note_id, new_content, diff, etc.
+    preview_message = Column(String, nullable=False) # human-readable "I want to update your note X..."
+    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(minutes=5))
+    created_at = Column(DateTime, default=datetime.utcnow)

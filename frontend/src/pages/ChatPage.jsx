@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { api } from "../api"
+import ConfirmationCard from "../components/ConfirmationCard"
 
 const FALLBACK_SUGGESTIONS = [
     "What have I saved recently?",
@@ -77,29 +78,33 @@ export default function ChatPage() {
         setMessages(prev => [...prev, tempUserMsg])
 
         try {
-            const res = await api.post("/chat/message", {
-                message: userMessage,
-                session_id: activeSession
-            })
-            const { session_id, answer, cited_notes } = res.data
+            const history = messages
+                .filter(m => m.role !== 'system')
+                .map(m => ({ role: m.role, content: m.content }));
 
-            if (!activeSession) {
-                setActiveSession(session_id)
-            }
+            const res = await api.post("/agent/chat", {
+                message: userMessage,
+                conversation_history: history
+            })
+            
+            const { response: answer, type, pending_action, cited_notes } = res.data
 
             setMessages(prev => [...prev, {
                 id: "ai-" + Date.now(),
                 role: "assistant",
                 content: answer,
-                cited_notes: cited_notes,
+                type: type,
+                pendingAction: pending_action,
+                cited_notes: cited_notes || [],
                 created_at: new Date().toISOString()
             }])
-            loadSessions()
+            // Not calling loadSessions() here because agentic chat doesn't persist to sessions yet
         } catch (err) {
             setMessages(prev => [...prev, {
                 id: "err-" + Date.now(),
                 role: "assistant",
                 content: "Sorry, something went wrong. Please try again.",
+                type: "answer",
                 created_at: new Date().toISOString()
             }])
         } finally {
@@ -400,7 +405,7 @@ export default function ChatPage() {
                     {/* Message bubbles */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                         {messages.map(msg => (
-                            <MessageBubble key={msg.id} message={msg} />
+                            <MessageBubble key={msg.id} message={msg} setMessages={setMessages} />
                         ))}
                     </div>
 
@@ -516,7 +521,7 @@ export default function ChatPage() {
     )
 }
 
-function MessageBubble({ message }) {
+function MessageBubble({ message, setMessages }) {
     const isUser = message.role === "user"
     const citedNotes = message.cited_notes?.filter(Boolean) || []
 
@@ -548,17 +553,32 @@ function MessageBubble({ message }) {
                 gap: "6px",
             }}>
                 {/* Bubble */}
-                <div style={{
-                    padding: "12px 16px",
-                    borderRadius: isUser ? "16px 4px 16px 16px" : "4px 16px 16px 16px",
-                    fontSize: "13px",
-                    lineHeight: 1.6,
-                    whiteSpace: "pre-wrap",
-                    background: isUser ? "#7c3aed" : "var(--bg-card-hover)",
-                    color: isUser ? "var(--text-primary)" : "var(--text-primary)",
-                }}>
-                    {message.content}
-                </div>
+                {message.type === "pending_confirmation" && message.pendingAction ? (
+                    <ConfirmationCard
+                        action={message.pendingAction}
+                        onResolved={(approved, msg) => {
+                            setMessages(prev => [...prev, {
+                                id: "sys-" + Date.now(),
+                                role: "system",
+                                content: msg,
+                                type: "answer",
+                                created_at: new Date().toISOString()
+                            }])
+                        }}
+                    />
+                ) : (
+                    <div style={{
+                        padding: "12px 16px",
+                        borderRadius: isUser ? "16px 4px 16px 16px" : "4px 16px 16px 16px",
+                        fontSize: "13px",
+                        lineHeight: 1.6,
+                        whiteSpace: "pre-wrap",
+                        background: isUser ? "#7c3aed" : "var(--bg-card-hover)",
+                        color: isUser ? "white" : "var(--text-primary)",
+                    }}>
+                        {message.content}
+                    </div>
+                )}
 
                 {/* Cited notes */}
                 {!isUser && citedNotes.length > 0 && (

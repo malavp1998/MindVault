@@ -100,6 +100,9 @@ app.include_router(cache_router, prefix="/api")
 from routes.revision import router as revision_router
 app.include_router(revision_router, prefix="/api")
 
+from routes.agentic_chat import router as agentic_chat_router
+app.include_router(agentic_chat_router)
+
 # MCP server direct route injection instead of mount to avoid /mcp/mcp duplication
 app.routes.extend(mcp_app.routes)
 

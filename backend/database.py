@@ -6,7 +6,6 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 from config import get_settings
 
-
 settings = get_settings()
 
 # asyncpg doesn't support query params like ?sslmode=require&channel_binding=require
