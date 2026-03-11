@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getNote, updateNote, processNote, deleteNote, api } from '../api';
 import ReactMarkdown from 'react-markdown';
+import RichTextEditor from '../components/RichTextEditor';
 
 export default function NotePage() {
     const { id } = useParams();
@@ -358,11 +359,12 @@ export default function NotePage() {
                 <h3 className="note-section-title">📄 Content</h3>
                 {isEditing ? (
                     <div style={{ marginBottom: 16 }}>
-                        <textarea
-                            value={editContent}
-                            onChange={e => setEditContent(e.target.value)}
-                            style={{ width: '100%', minHeight: '300px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <RichTextEditor 
+                                content={editContent} 
+                                onChange={setEditContent} 
+                            />
+                        </div>
                         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
                             <button
                                 onClick={handleSaveEdit}
@@ -389,7 +391,7 @@ export default function NotePage() {
                         </div>
                     </div>
                 ) : (
-                    <div className="note-detail-content">{note.content}</div>
+                    <div className="note-detail-content tiptap-render" dangerouslySetInnerHTML={{ __html: note.content }} />
                 )}
             </div>
 

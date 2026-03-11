@@ -152,7 +152,6 @@ export default function ChatPage() {
             marginLeft: "-2rem",
             marginTop: "-2rem",
             width: "calc(100% + 4rem)",
-            height: "calc(100% + 4rem)",
         }}>
             {/* Session Sidebar */}
             <div style={{

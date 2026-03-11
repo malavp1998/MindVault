@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Masonry from 'react-masonry-css';
 import { listNotes, listTopics, deleteNote, createNote, createAudioNote } from '../api';
 import ReactMarkdown from 'react-markdown';
+import RichTextEditor from '../components/RichTextEditor';
 
 export default function VaultPage() {
     const [notes, setNotes] = useState([]);
@@ -178,13 +179,15 @@ export default function VaultPage() {
     };
 
     const handleCreateNote = async () => {
-        if (!newNoteContent.trim() && !newNoteTitle.trim()) return;
+        // Strip out empty tags that might be added by Tiptap (e.g., <p></p>)
+        const isEmpty = !newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '');
+        if (isEmpty) return;
 
         setIsSaving(true);
         try {
             const newNote = await createNote({
                 title: newNoteTitle.trim() || "Untitled Note",
-                content: newNoteContent.trim(),
+                content: newNoteContent,
                 user_tags: extractedTags,
                 source_url: `MindVault Web (${Date.now()})`
             });
@@ -337,26 +340,26 @@ export default function VaultPage() {
                             outline: 'none'
                         }}
                     />
-                    <textarea
-                        placeholder="Write your note here... Use #hashtags to automatically tag it!"
-                        value={newNoteContent + (interimTranscript ? (newNoteContent.endsWith(' ') || newNoteContent.length === 0 ? '' : ' ') + interimTranscript : '')}
-                        onChange={handleContentChange}
-                        style={{
-                            width: '100%',
-                            background: 'var(--bg-primary)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: 12,
-                            minHeight: 120,
-                            padding: 16,
-                            fontSize: 14,
-                            color: interimTranscript ? 'var(--text-muted)' : 'var(--text-primary)',
-                            resize: 'vertical',
-                            outline: 'none',
-                            fontFamily: 'Inter, sans-serif'
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = 'var(--accent-color)'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                    />
+                    <div style={{ marginBottom: 16 }}>
+                        <RichTextEditor
+                            content={newNoteContent + (interimTranscript ? (newNoteContent.endsWith(' ') || newNoteContent.length === 0 ? '' : ' ') + interimTranscript : '')}
+                            onChange={(html) => {
+                                setNewNoteContent(html);
+                                // Optional hashtag styling parsing if desired
+                                const textContent = html.replace(/<[^>]*>?/gm, ''); // primitive text strip for hashtags
+                                const hashtagRegex = /#([a-zA-Z0-9_]+)/g;
+                                const tags = [];
+                                let match;
+                                while ((match = hashtagRegex.exec(textContent)) !== null) {
+                                    if (!tags.includes(match[1].toLowerCase())) {
+                                        tags.push(match[1].toLowerCase());
+                                    }
+                                }
+                                setExtractedTags(tags);
+                            }}
+                            placeholder="Write your note here... Use #hashtags to automatically tag it!"
+                        />
+                    </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -414,19 +417,19 @@ export default function VaultPage() {
 
                             <button
                                 onClick={handleCreateNote}
-                                disabled={isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())}
+                                disabled={isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === ''))}
                                 style={{
-                                    background: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim())
+                                    background: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === ''))
                                         ? 'var(--bg-secondary)'
                                         : 'linear-gradient(135deg, #10B981, #059669)',
-                                    color: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'var(--text-muted)' : '#fff',
-                                    border: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? '1px solid var(--border-color)' : 'none',
+                                    color: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? 'var(--text-muted)' : '#fff',
+                                    border: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? '1px solid var(--border-color)' : 'none',
                                     padding: '10px 24px',
                                     borderRadius: 10,
                                     fontWeight: 600,
                                     fontSize: 14,
-                                    boxShadow: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
-                                    cursor: isSaving || (!newNoteTitle.trim() && !newNoteContent.trim()) ? 'not-allowed' : 'pointer',
+                                    boxShadow: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                                    cursor: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? 'not-allowed' : 'pointer',
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 8,
@@ -434,13 +437,13 @@ export default function VaultPage() {
                                     transform: isSaving ? 'scale(0.98)' : 'scale(1)'
                                 }}
                                 onMouseOver={(e) => {
-                                    if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
+                                    if (!isSaving && (newNoteTitle.trim() || (newNoteContent && newNoteContent !== '<p></p>'))) {
                                         e.currentTarget.style.transform = 'translateY(-1px)';
                                         e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.35)';
                                     }
                                 }}
                                 onMouseOut={(e) => {
-                                    if (!isSaving && (newNoteTitle.trim() || newNoteContent.trim())) {
+                                    if (!isSaving && (newNoteTitle.trim() || (newNoteContent && newNoteContent !== '<p></p>'))) {
                                         e.currentTarget.style.transform = 'translateY(0)';
                                         e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
                                     }
