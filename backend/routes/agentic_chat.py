@@ -87,6 +87,7 @@ async def agentic_chat(
             "tool_result": None,
             "pending_action_id": None,
             "final_response":    None,
+            "compressed_summary": None,
         }, config={"configurable": {"db": db}})
     except Exception as e:
         import logging

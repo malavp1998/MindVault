@@ -15,7 +15,7 @@ async def search_vault(query: str, user_id: str, config: RunnableConfig) -> list
     query_embedding = await get_embedding(query)
     results = await db.execute(
         text("""
-            SELECT n.id, n.title, n.content, t.name as topic_name,
+            SELECT n.id, n.title, n.summary, n.content, t.name as topic_name,
                    1 - (n.embedding <=> CAST(:emb AS vector)) AS score
             FROM notes n
             LEFT JOIN topics t ON n.topic_id = t.id
@@ -26,7 +26,16 @@ async def search_vault(query: str, user_id: str, config: RunnableConfig) -> list
         {"emb": str(query_embedding), "uid": user_id}
     )
     rows = results.fetchall()
-    return [{"id": str(r.id), "title": r.title, "topic": r.topic_name, "content": r.content, "score": r.score} for r in rows]
+    return [
+        {
+            "id": str(r.id),
+            "title": r.title,
+            "topic": r.topic_name,
+            "summary": r.summary or (r.content[:400] + "…" if r.content else ""),
+            "score": round(r.score, 3),
+        }
+        for r in rows
+    ]
 
 
 @tool

@@ -11,7 +11,8 @@
 
 1. [Semantic Caching](#1-semantic-caching)
 2. [Incremental HDBSCAN Clustering](#2-incremental-hdbscan-clustering)
-3. *(more techniques will be added as they are implemented)*
+3. [Structured Prompting (XML + JSON Schema)](#3-structured-prompting-xml--json-schema)
+4. *(more techniques will be added as they are implemented)*
 
 ---
 
@@ -327,6 +328,104 @@ also fired as a background task to keep the model accurate over time.
 - Lewis et al. (2020) — Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
 - pgvector HNSW indexing — github.com/pgvector/pgvector
 - Bang et al. (2023) — GPTCache: A Data or Model Infrastructure for LLM-based Applications
+
+---
+
+## 3. Structured Prompting (XML + JSON Schema)
+
+### Motivation
+
+Previously, MindVault relied on free-text prompts that asked the LLM to return comma-separated lists, numbered bullet points, or raw strings (e.g., for tags, summaries, and synthesized answers). This caused several issues:
+
+- **Fragile Parsing:** Regex or string splitting logic often broke when the LLM added conversational filler (e.g., "Here are your tags:") or markdown formatting.
+- **Redundant LLM Calls:** Extracting a summary and extracting key concepts required two entirely separate LLM API calls on the same text.
+- **Inconsistent Outputs:** The model sometimes missed constraints, failing to return the exact number of required items.
+
+---
+
+### What It Is
+
+Structured Prompting enforces strict, predictable outputs by:
+1. Using XML-like tags (`<role>`, `<task>`, `<schema>`, `<rules>`, `<content>`) to strictly demarcate instructions from user data, preventing prompt injection and context confusion.
+2. Demanding exactly one machine-parseable JSON object/array as the final Output.
+3. Consolidating multiple extractions (e.g., TL;DR + Concepts + Insights) into a single LLM call that returns a combined JSON payload.
+
+---
+
+### Implementation Details
+
+#### Prompt Structure
+Every prompt is standardized using an XML-style layout to explicitly define the schema:
+```python
+prompt = f\"\"\"<role>You are a precise metadata tagging engine.</role>
+
+<task>Extract 3-5 tags into a structured JSON array.</task>
+
+<schema>
+["tag1", "tag2", "tag3"]
+</schema>
+
+<rules>
+- Return ONLY the JSON array, no preamble or explanation.
+- Lowercase, no punctuation.
+</rules>
+
+<example>
+Input: "..."
+Output: ["...", "..."]
+</example>
+
+<note>{content}</note>
+
+Output:\"\"\"
+```
+
+#### Parsing Logic
+A robust parsing shim uses `json.loads()`, stripping out accidental markdown fences:
+```python
+raw = await llm_complete(prompt)
+try:
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = "\\n".join(cleaned.split("\\n")[1:-1])
+    parsed_json = json.loads(cleaned)
+except (json.JSONDecodeError, ValueError):
+    # Fallback to safe defaults
+    parsed_json = fallback_value
+```
+
+---
+
+### Where It Is Applied
+
+| Feature | File | Improvement |
+|---------|------|-------------|
+| **Note Summary** | `services/llm.py` | `generate_summary` returns `{"tldr": "...", "key_concepts": [...]}` |
+| **Concept Extraction** | `services/pipeline.py` | Removed the standalone `extract_concepts` LLM call; pipeline now parses concepts directly from the single summary output |
+| **RAG QA** | `services/llm.py`, `agent.py` | `synthesize_answer` & `synthesize_node` return structured `answer`, `cited_source_ids`, and `confidence` |
+| **Tagging** | `services/tagging.py` | `generate_tags` returns a pure JSON array `["tag1", "tag2"]` |
+| **Agentic Chat** | `services/agentic_chat.py` | `classify_intent` returns `{"primary": "READ\|WRITE", "confidence": "high"}` |
+
+---
+
+### Tradeoffs
+
+**Pros:**
+- **Cost & Latency Reduction:** Eliminating the secondary concept extraction call cuts LLM usage by ~50% per note ingestion.
+- **Reliability:** Almost 100% deterministic parsing using standard JSON.
+- **Extensibility:** Makes it trivial to add new metadata fields (like confidence scores or source attribution) without writing fragile new regexes.
+
+**Cons:**
+- **Token Overhead:** Defining the JSON schema and rules adds a small token overhead to both the input prompt and output completion.
+- **Model Requirements:** Generating perfectly formatted JSON consistently requires a capable LLM (like Llama 3 70B, GPT-4, or equivalent); weaker models may mangle the syntax.
+
+---
+
+### Expected Impact
+
+- **Latency:** Reduces note ingestion pipeline time by 1–3 seconds due to consolidating two LLM calls into one.
+- **API Costs:** Effectively halves the token usage specifically for processing newly saved notes.
+- **Stability:** Removes edge-case bugs triggered by LLM conversational preamble or formatting quirks.
 
 ---
 

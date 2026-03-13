@@ -91,8 +91,10 @@ export default function ChatPage() {
         setMessages(prev => [...prev, tempUserMsg])
 
         try {
+            const MAX_HISTORY_TURNS = 10;
             const history = messages
                 .filter(m => m.role !== 'system')
+                .slice(-MAX_HISTORY_TURNS)
                 .map(m => ({ role: m.role, content: m.content }));
 
             const res = await api.post("/agent/chat", {

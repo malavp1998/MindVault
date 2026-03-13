@@ -39,6 +39,7 @@ class AgentState(TypedDict):
     tool_result: dict | list | None # result from tool call
     pending_action_id: str | None  # UUID of stored PendingAgentAction
     final_response: str | None     # message to send back to frontend
+    compressed_summary: str | None   # rolling summary of compressed turns
 
 
 # ── LLM ───────────────────────────────────────────────────────
@@ -80,7 +81,12 @@ WRITE = create, update, delete, merge, rename, tag, reorganize notes
 
 Return ONLY the JSON object, nothing else.""")
 
-    response = await llm.ainvoke([system] + state["messages"])
+    # Only the latest user message matters for intent — no history needed
+    last_user_msg = next(
+        (m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)),
+        state["messages"][-1],
+    )
+    response = await llm.ainvoke([system, last_user_msg])
 
     try:
         cleaned = response.content.strip()
@@ -102,82 +108,118 @@ Return ONLY the JSON object, nothing else.""")
 from config import get_settings as _get_settings
 
 def _estimate_tokens(messages: list) -> int:
-    """Rough estimate: 4 chars ≈ 1 token. Skips non-text messages."""
-    total = 0
-    for m in messages:
-        content = getattr(m, "content", None)
-        if isinstance(content, str):
-            total += len(content)
-        elif isinstance(content, list):
-            # tool result messages may have list content
-            for block in content:
-                if isinstance(block, dict):
-                    total += len(str(block))
-    return total // 4
+    """
+    Rough token estimate: 1 token ≈ 4 characters.
+    Used only for gating compression — does not need to be exact.
+    """
+    total_chars = sum(
+        len(m.content) if isinstance(m.content, str) else
+        len(str(m.content))
+        for m in messages
+    )
+    return total_chars // 4
 
 
-# ── Node 1b: Compress history if over token limit ─────────────
+# ── Node 1b: Compress history to stay within context budget ──
+
+TOOL_MSG_TYPES = (ToolMessage,)   # ToolMessage imported at top of execute_tool block
 
 async def compress_history(state: AgentState) -> AgentState:
     """
-    If conversation history exceeds settings.chat_compression_threshold,
-    compress older turns into a single dense SystemMessage summary using the LLM.
-
-    Strategy (mirrors Anthropic's own approach):
-    1. Keep the last 4 messages verbatim (most recent context)
-    2. Strip ToolMessages from the older portion (they're the biggest bloat)
-    3. Ask the LLM to compress the remaining older turns into one paragraph
-    4. Replace the older portion with [SystemMessage: compressed summary]
-
-    Threshold is read from settings so it's tunable via .env:
-        CHAT_COMPRESSION_THRESHOLD=10000
-
-    This runs AFTER classify_intent so intent is already known.
-    It runs BEFORE call_agent so the LLM never sees the bloated history.
+    Two-stage context compression:
+      Stage 1: Strip ToolMessages from all but the most recent tool call round.
+               These carry large RAG payloads that are stale after synthesis.
+      Stage 2: If token estimate still exceeds threshold, LLM-summarize the
+               oldest half of human/AI turns into a single SystemMessage summary
+               and prepend it, replacing those turns.
     """
-    messages = state["messages"]
-    threshold = _get_settings().chat_compression_threshold
+    from config import get_settings
+    settings = get_settings()
+    from langchain_core.messages import ToolMessage as TM
 
+    messages = list(state["messages"])
+    if not messages:
+        return state
+
+    # ── Stage 1: Strip stale ToolMessages ────────────────────
+    # Find index of the most recent AIMessage that made a tool call
+    last_tool_call_idx = -1
+    for i in range(len(messages) - 1, -1, -1):
+        msg = messages[i]
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            last_tool_call_idx = i
+            break
+
+    if last_tool_call_idx > 0:
+        # Keep everything from the last tool call round onward;
+        # strip ToolMessages from all earlier positions
+        cleaned = []
+        for i, msg in enumerate(messages):
+            if i < last_tool_call_idx and isinstance(msg, TM):
+                continue   # drop stale tool result
+            cleaned.append(msg)
+        messages = cleaned
+
+    # ── Stage 2: LLM compress if still over threshold ────────
+    threshold = getattr(settings, "chat_compression_threshold", 6000)
     if _estimate_tokens(messages) <= threshold:
-        return state  # nothing to do
+        return {**state, "messages": messages}
 
-    # Keep last 4 turns intact
-    recent = messages[-4:]
-    older = messages[:-4]
+    # Separate human/AI turns from any leading SystemMessages
+    system_msgs = [m for m in messages if isinstance(m, SystemMessage)]
+    conv_msgs   = [m for m in messages if not isinstance(m, SystemMessage)]
 
-    # Strip ToolMessages from older — they're stale retrieval chunks, not conversation
-    older_chat = [
-        m for m in older
-        if not isinstance(m, ToolMessage) and getattr(m, "content", None)
-    ]
+    # Only compress if there are enough turns to make it worthwhile
+    if len(conv_msgs) < 4:
+        return {**state, "messages": messages}
 
-    if not older_chat:
-        # Nothing meaningful to compress — just drop old tool noise
-        return {**state, "messages": recent}
+    # Compress the oldest half; keep the newest half verbatim for recency
+    half = len(conv_msgs) // 2
+    old_turns  = conv_msgs[:half]
+    keep_turns = conv_msgs[half:]
 
-    older_text = "\n".join(
-        f"{type(m).__name__.replace('Message','').upper()}: {m.content}"
-        for m in older_chat
-        if isinstance(m.content, str)
-    )
+    # Build a readable transcript of the old turns for the summarizer
+    transcript_lines = []
+    for m in old_turns:
+        role = "User" if isinstance(m, HumanMessage) else "Assistant"
+        content = m.content if isinstance(m.content, str) else str(m.content)
+        transcript_lines.append(f"{role}: {content[:600]}")   # cap each turn at 600 chars
+    transcript = "\n\n".join(transcript_lines)
 
-    compression_prompt = (
-        "You are compressing a conversation history to save tokens. "
-        "Write a single dense paragraph summarising the key facts below. "
-        "Preserve: user intent, any note titles or IDs mentioned, "
-        "actions already taken, and any unresolved questions. "
-        "Drop all pleasantries and filler.\n\n"
-        f"CONVERSATION TO COMPRESS:\n{older_text}"
-    )
+    # Retrieve any prior rolling summary to chain compression across sessions
+    prior_summary = state.get("compressed_summary") or ""
+    prior_block   = f"Prior context:\n{prior_summary}\n\n" if prior_summary else ""
+
+    compression_prompt = f"""{prior_block}Summarize the following conversation excerpt in 3-5 sentences.
+Preserve: key facts the user mentioned, notes they asked about, any decisions made.
+Discard: greetings, filler, redundant search results.
+Return ONLY the summary, no preamble.
+
+---
+{transcript}
+---"""
 
     try:
-        summary = await llm_complete(compression_prompt, "en")
-        compressed = [SystemMessage(content=f"[Compressed earlier context]: {summary}")]
+        summary_response = await llm.ainvoke([
+            SystemMessage(content="You are a concise conversation summarizer."),
+            HumanMessage(content=compression_prompt),
+        ])
+        new_summary = summary_response.content.strip()
     except Exception:
-        # If compression itself fails, fall back to just keeping recent turns
-        compressed = []
+        # If compression fails, fall back gracefully — skip compression this turn
+        return {**state, "messages": messages}
 
-    return {**state, "messages": compressed + recent}
+    summary_msg = SystemMessage(
+        content=f"[Conversation summary — earlier context]\n{new_summary}"
+    )
+
+    compressed_messages = system_msgs + [summary_msg] + keep_turns
+
+    return {
+        **state,
+        "messages": compressed_messages,
+        "compressed_summary": new_summary,
+    }
 
 
 # ── Node 2: Call agent with tools ────────────────────────────
