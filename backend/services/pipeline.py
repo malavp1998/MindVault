@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Note, NoteLink
 from services.embedding import get_embedding
-from services.llm import generate_summary, extract_concepts
+from services.llm import generate_summary
 from services.language import detect_language
 from services.tagging import generate_tags
 from services.clustering import cluster_notes, assign_new_note_incremental, _notes_since_full_cluster, FULL_RECLUSTER_THRESHOLD
@@ -17,6 +17,7 @@ from langsmith import traceable
 import asyncio
 from config import get_settings
 from database import async_session
+import json
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -55,17 +56,21 @@ async def process_note(note_id: uuid.UUID) -> None:
         logger.error(f"Embedding failed for note {note_id}: {e}", exc_info=True)
 
     summary = content[:300] + "..."
+    key_concepts: list[str] = []
     lang = detect_language(content)
     try:
-        summary = await generate_summary(content, content_language=lang)
+        raw_summary = await generate_summary(content, content_language=lang)
+        # generate_summary now returns JSON — extract tldr and key_concepts together
+        try:
+            parsed = json.loads(raw_summary)
+            summary = parsed.get("tldr", raw_summary)
+            key_concepts = parsed.get("key_concepts", [])
+        except (json.JSONDecodeError, ValueError):
+            # Fallback: raw_summary is a plain string (old cache hit or LLM error)
+            summary = raw_summary
+            key_concepts = []
     except Exception as e:
         logger.warning(f"Summary generation failed: {e}")
-
-    key_concepts: list[str] = []
-    try:
-        key_concepts = await extract_concepts(content)
-    except Exception as e:
-        logger.warning(f"Concept extraction failed: {e}")
 
     # --- Step 3: Write all results in a single clean DB transaction ---
     async with async_session() as db:

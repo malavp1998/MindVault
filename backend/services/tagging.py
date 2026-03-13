@@ -1,6 +1,7 @@
 from __future__ import annotations
 """Service for automatically tagging notes and managing tag states."""
 
+import json
 from services.llm import llm_complete
 from services.language import is_indic
 from services.semantic_cache import get_cached_response, set_cached_response
@@ -19,35 +20,58 @@ async def generate_tags(content: str, lang: str) -> list[str]:
         return [t.strip() for t in cached.split(",") if t.strip()]
 
     if is_indic(lang):
-        prompt = f"""
-        Is note ke liye 3-5 relevant tags generate karo.
-        Sirf tags return karo, comma separated, lowercase.
-        Example: machine learning, neural networks, deep learning
-        
-        Note: {content[:1000]}
-        """
+        prompt = f"""<role>Aap ek precise metadata tagging system hain personal knowledge vault ke liye.</role>
+
+<task>Neeche diye note ke liye 3-5 concise tags extract karo.</task>
+
+<rules>
+- Tags 1-3 words, lowercase, no punctuation
+- Specific prefer karo generic se: "transformer attention" better than "ai"
+- Return ONLY a JSON array of strings — no markdown, no explanation
+</rules>
+
+<example>
+Input: "Python asyncio event loop aur FastAPI ke baare mein article"
+Output: ["asyncio", "python", "event loop", "fastapi", "async programming"]
+</example>
+
+<note>{content[:1000]}</note>
+
+Output:"""
     else:
-        prompt = f"""
-        Generate 3-5 relevant tags for this note.
-        Return ONLY tags, comma separated, lowercase.
-        Example: machine learning, neural networks, deep learning
-        
-        Note: {content[:1000]}
-        """
-    
+        prompt = f"""<role>You are a precise metadata tagging system for a personal knowledge vault.</role>
+
+<task>Extract 3-5 concise, lowercase tags from the note content below.</task>
+
+<rules>
+- Tags must be 1-3 words, lowercase, no punctuation
+- Prefer specific over generic ("transformer attention" over "ai")
+- Return ONLY a JSON array of strings — no markdown fences, no explanation
+</rules>
+
+<example>
+Input: "Article about Python asyncio event loop and coroutines for FastAPI"
+Output: ["asyncio", "python", "event loop", "fastapi", "coroutines"]
+</example>
+
+<note>{content[:1000]}</note>
+
+Output:"""
+
     response = await llm_complete(prompt, lang)
-    
+
     try:
-        # parse comma separated tags
         cleaned = response.strip()
         if cleaned.startswith("```"):
-            cleaned = "\n".join(cleaned.split("\n")[1:-1])
-            
-        tags = [tag.strip().lower() for tag in cleaned.split(",")]
-        # Filter artifacts and length
-        tags = [tag for tag in tags if 1 < len(tag) < 30 and tag.isalpha() or " " in tag]
-        tags = tags[:5]  # max 5 tags
-    except Exception:
+            lines = cleaned.split("\n")
+            cleaned = "\n".join(lines[1:-1])
+        tags = json.loads(cleaned)
+        # Validate: must be a list of short strings
+        tags = [
+            t.strip().lower() for t in tags
+            if isinstance(t, str) and 1 < len(t.strip()) < 40
+        ][:5]
+    except (json.JSONDecodeError, ValueError, TypeError):
         tags = []
 
     if tags:

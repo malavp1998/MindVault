@@ -177,25 +177,76 @@ async def generate_summary(content: str, content_language: str | None = None) ->
         return cached
 
     if is_indic(lang):
-        summary_prompt = f"""
-        Is content ka summary do same language mein:
-        1. 3 sentence ka TL;DR
-        2. Key concepts (bullet points)
-        3. Important insights
+        summary_prompt = f"""<role>Aap ek precise knowledge summarization engine hain.</role>
 
-        Content: {content[:4000]}
-        """
+<task>Neeche diye content ka structured JSON summary banao.</task>
+
+<schema>
+{{
+  "tldr": "exactly 2-3 sentences, plain prose, same language as content",
+  "key_concepts": ["concept1", "concept2", "concept3"],
+  "insights": ["insight1", "insight2"]
+}}
+</schema>
+
+<rules>
+- tldr must be self-contained — sirf padhke topic samajh aaye
+- key_concepts: 3-6 short noun phrases, lowercase
+- insights: 1-3 actionable takeaways, empty array if none
+- Return ONLY the JSON object — no markdown fences, no explanation
+</rules>
+
+<content>{content[:4000]}</content>
+
+Output:"""
     else:
-        summary_prompt = f"""
-        Summarize this content:
-        1. 3-sentence TL;DR
-        2. Key concepts (bullet points)
-        3. Actionable insights
+        summary_prompt = f"""<role>You are a precise knowledge summarization engine for a personal vault.</role>
 
-        Content: {content[:4000]}
-        """
+<task>Summarize the content below into a structured JSON object.</task>
 
-    result = await llm_complete(summary_prompt, lang)
+<schema>
+{{
+  "tldr": "exactly 2-3 sentences, plain prose, no bullet points",
+  "key_concepts": ["concept1", "concept2", "concept3"],
+  "insights": ["insight1", "insight2"]
+}}
+</schema>
+
+<rules>
+- tldr must be self-contained — someone should understand the topic from it alone
+- key_concepts: 3-6 single nouns or short phrases, lowercase
+- insights: 1-3 actionable or notable takeaways, can be empty array if none
+- Return ONLY the JSON object — no markdown fences, no preamble
+</rules>
+
+<example>
+Input: "Article about Python asyncio event loop, coroutines, and FastAPI async endpoints"
+Output: {{"tldr": "Python asyncio uses an event loop to run coroutines concurrently without threads. FastAPI is built on this model, making all route handlers async by default. Understanding the event loop is essential for avoiding blocking calls in production.", "key_concepts": ["asyncio", "event loop", "coroutines", "fastapi", "async/await"], "insights": ["Never call blocking I/O inside async functions — use run_in_executor instead", "FastAPI's dependency injection is fully async-compatible"]}}
+</example>
+
+<content>{content[:4000]}</content>
+
+Output:"""
+
+    raw = await llm_complete(summary_prompt, lang)
+
+    # Parse structured response — extract tldr as the stored summary,
+    # return full parsed object so pipeline.py can pluck key_concepts directly
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            cleaned = "\n".join(lines[1:-1])
+        parsed = json.loads(cleaned)
+        tldr = parsed.get("tldr", "").strip()
+        # Stash key_concepts on the parsed object so pipeline.py can use them
+        # without a second LLM call (see Change 4 — pipeline.py)
+        result = json.dumps(parsed)   # store full object in cache
+    except (json.JSONDecodeError, ValueError):
+        # Fallback: treat the raw response as a plain summary string
+        tldr = raw.strip()
+        result = raw
+
     await set_cached_response(cache_query, result, cache_key="summary", ttl_hours=settings.cache_ttl_summary_hours)
     return result
 
@@ -237,26 +288,87 @@ async def synthesize_answer(query: str, contexts: list[str], user_id: str | None
     context_block = "\n\n".join(contexts)
 
     if is_indic(lang):
-        prompt = f"""
-        Sirf neeche diye notes ke basis par answer do.
-        Answer same language mein do jisme question hai.
+        prompt = f"""<role>Aap MindVault ka RAG synthesis engine hain.</role>
 
-        Notes:
-        {context_block}
+<task>Neeche diye notes ke basis par question ka structured JSON answer do.</task>
 
-        Question: {query}
-        """
+<notes>
+{context_block}
+</notes>
+
+<question>{query}</question>
+
+<schema>
+{{
+  "answer": "2-4 sentences, natural prose, same language as question",
+  "cited_source_ids": [1, 2],
+  "confidence": "high | medium | low",
+  "insufficient_context": true | false
+}}
+</schema>
+
+<rules>
+- cited_source_ids: [Source N] numbers from notes above jo directly relevant hain
+- insufficient_context: true if notes mein enough info nahi hai
+- confidence: high = notes directly answer karte hain, medium = partial, low = tangential
+- Kabhi bhi notes se bahar ki information invent mat karo
+- Return ONLY the JSON object
+</rules>
+
+Output:"""
     else:
-        prompt = f"""
-        Answer using ONLY the context from the notes below.
+        prompt = f"""<role>You are MindVault's RAG synthesis engine. You answer questions using ONLY the user's personal notes.</role>
 
-        Notes:
-        {context_block}
+<task>Answer the question using the provided notes. Return a structured JSON response.</task>
 
-        Question: {query}
-        """
+<notes>
+{context_block}
+</notes>
 
-    result = await llm_complete(prompt, lang)
+<question>{query}</question>
+
+<schema>
+{{
+  "answer": "2-4 sentences, natural prose",
+  "cited_source_ids": [1, 2],
+  "confidence": "high | medium | low",
+  "insufficient_context": true | false
+}}
+</schema>
+
+<rules>
+- cited_source_ids must reference [Source N] numbers from the notes above
+- If notes don't contain enough to answer, set insufficient_context: true and explain in answer
+- confidence: high = notes directly answer it, medium = partial, low = tangential
+- Never invent facts not present in the notes
+- Return ONLY the JSON object — no markdown, no preamble
+</rules>
+
+<example>
+Notes: "[Source 1]: Title: Asyncio Notes\nCoroutines are defined with async def and awaited with await."
+Question: "How do you define a coroutine in Python?"
+Output: {{"answer": "A coroutine in Python is defined using the async def syntax and must be awaited when called.", "cited_source_ids": [1], "confidence": "high", "insufficient_context": false}}
+</example>
+
+Output:"""
+
+    raw = await llm_complete(prompt, lang)
+
+    # Parse and extract the plain answer string for downstream consumers
+    # that still expect a string return value (agent.py synthesize_node)
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            cleaned = "\n".join(lines[1:-1])
+        parsed = json.loads(cleaned)
+        # Return the full JSON string — callers that need structured data
+        # (routes/notes.py RAGResponse) can json.loads() it;
+        # callers that need plain text get parsed["answer"]
+        result = raw  # cache the full JSON
+    except (json.JSONDecodeError, ValueError):
+        result = raw  # fallback: cache raw string
+
     await set_cached_response(query, result, cache_key="rag", user_id=user_id, ttl_hours=settings.cache_ttl_rag_hours)
     return result
 

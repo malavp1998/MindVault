@@ -60,19 +60,40 @@ async def classify_intent(state: AgentState) -> AgentState:
     READ  = search, summarize, explain, recall, find
     WRITE = create, update, delete, merge, tag, rename
     """
-    system = SystemMessage(content="""
-You are an intent classifier for a personal knowledge vault.
-Classify the user's message as exactly one of: READ or WRITE.
+    system = SystemMessage(content="""<role>You are an intent classifier for a personal knowledge vault.</role>
 
-READ  = searching, summarizing, recalling, explaining existing notes
-WRITE = creating, updating, deleting, merging, tagging, renaming notes
+<intents>
+READ  = search, recall, summarize, explain, find, list, compare existing notes
+WRITE = create, update, delete, merge, rename, tag, reorganize notes
+</intents>
 
-Respond with ONLY the word READ or WRITE, nothing else.
-    """)
+<output_schema>
+{"primary": "READ|WRITE", "has_secondary_write": true|false, "confidence": "high|medium|low"}
+</output_schema>
+
+<examples>
+"what do I know about Python async?" → {"primary": "READ", "has_secondary_write": false, "confidence": "high"}
+"find my transformer note and update its tags" → {"primary": "READ", "has_secondary_write": true, "confidence": "high"}
+"create a note about gradient descent" → {"primary": "WRITE", "has_secondary_write": false, "confidence": "high"}
+"summarize everything I saved this week" → {"primary": "READ", "has_secondary_write": false, "confidence": "medium"}
+</examples>
+
+Return ONLY the JSON object, nothing else.""")
+
     response = await llm.ainvoke([system] + state["messages"])
-    intent = response.content.strip().upper()
-    if intent not in ("READ", "WRITE"):
-        intent = "READ"  # default safe
+
+    try:
+        cleaned = response.content.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            cleaned = "\n".join(lines[1:-1])
+        parsed = json.loads(cleaned)
+        intent = parsed.get("primary", "READ").upper()
+        if intent not in ("READ", "WRITE"):
+            intent = "READ"
+    except (json.JSONDecodeError, ValueError):
+        intent = "READ"  # safe fallback
+
     return {**state, "intent": intent}
 
 
@@ -162,18 +183,30 @@ async def compress_history(state: AgentState) -> AgentState:
 # ── Node 2: Call agent with tools ────────────────────────────
 
 async def call_agent(state: AgentState) -> AgentState:
-    system = SystemMessage(content=f"""
-You are MindVault's AI agent. The user's vault belongs to user_id: {state["user_id"]}.
+    system = SystemMessage(content=f"""<role>MindVault AI agent for user_id: {state["user_id"]}</role>
 
-You have access to tools to search and manage their notes.
+<capabilities>
+- search_vault: semantic search across user's notes — use for any recall/find/summarize intent
+- read_note: fetch full note content by UUID — use when you need complete text of a specific note
+- propose_create_note: draft a new note (returns preview, requires user confirmation)
+- propose_update_note: suggest edits to existing note (returns diff preview, requires confirmation)
+- propose_delete_note: propose deletion (returns preview, requires confirmation)
+</capabilities>
 
-IMPORTANT RULES:
-- For READ requests: call search_vault or read_note and return a concise, precise answer. ONLY use information from the tool results that directly answers the user's specific query. IGNORE any irrelevant search results or extra notes returned that do not directly pertain to the user's question. DO NOT summarize all search results if they are not relevant.
-- For WRITE requests: call the appropriate propose_* tool which returns a PREVIEW.
-  Do NOT execute writes directly. The propose_* tools only generate a preview.
-- For UPDATE or DELETE requests: you MUST use the exact `id` field (a UUID string) returned from search_vault or read_note as your `note_id` argument! Do not pass the note title or topic as the note_id!
-- Always be specific about what you are doing or proposing. Do not hallucinate note content.
-    """)
+<constraints>
+<constraint id="scope">Only access notes belonging to user_id: {state["user_id"]} — never cross user boundaries</constraint>
+<constraint id="writes">WRITE tools return previews only — never execute writes directly</constraint>
+<constraint id="ids">For update/delete: use exact UUID `id` field from search_vault/read_note results — never use title or topic name as note_id</constraint>
+<constraint id="relevance">Only cite search results that directly answer the query — ignore tangential matches</constraint>
+<constraint id="hallucination">Never invent note content — only use what tool results return</constraint>
+</constraints>
+
+<reasoning_pattern>
+1. Identify what the user specifically needs
+2. Choose the minimal set of tools required (prefer one search over two)
+3. Use tool results only — do not supplement with invented content
+4. Synthesize a direct, concise response
+</reasoning_pattern>""")
     response = await llm_with_tools.ainvoke([system] + state["messages"])
     return {**state, "messages": state["messages"] + [response]}
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 """RAG Agent — simplified search→synthesize pipeline (1 LLM call)."""
 
 import uuid
+import json
 from typing import TypedDict
 from sqlalchemy import text
 from langgraph.graph import StateGraph, END
@@ -105,23 +106,45 @@ async def synthesize_node(state: AgentState) -> dict:
         for i, n in enumerate(notes)
     )
 
-    if is_indic(query_lang):
-        prompt = (
-            f"Aap ek helpful assistant ho. Neeche diye gaye notes ke basis par "
-            f"question ka jawab do. Sirf notes ki information use karo. "
-            f"Answer {query_lang} language mein do.\n\n"
-            f"Notes:\n{context_block}\n\nQuestion: {query}"
-        )
-    else:
-        prompt = (
-            "You are a knowledgeable assistant answering questions based strictly on the user's personal notes. "
-            "Use the provided source notes to accurately answer the question. "
-            "Cite your sources using [Source N] notation. If the sources don't contain enough information, "
-            "state exactly what you know and don't invent details.\n\n"
-            f"Notes:\n{context_block}\n\nQuestion: {query}"
-        )
+    prompt = f"""<role>You are MindVault's answer synthesis engine. You answer using ONLY the user's personal notes.</role>
 
-    answer = await llm_complete(prompt, query_lang)
+<task>Answer the question. Return a structured JSON response.</task>
+
+<notes>
+{context_block}
+</notes>
+
+<question>{query}</question>
+
+<schema>
+{{
+  "answer": "2-4 sentences, natural prose, same language as question",
+  "cited_source_ids": [1, 2],
+  "confidence": "high | medium | low",
+  "insufficient_context": true | false
+}}
+</schema>
+
+<rules>
+- cited_source_ids: integers referencing [Source N] numbers above
+- Never invent details not in the notes
+- If insufficient, set insufficient_context: true and say what's missing in answer
+- Return ONLY the JSON object
+</rules>
+
+Output:"""
+
+    raw = await llm_complete(prompt, query_lang)
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            cleaned = "\n".join(lines[1:-1])
+        parsed = json.loads(cleaned)
+        answer = parsed.get("answer", raw)
+    except (json.JSONDecodeError, ValueError):
+        answer = raw  # graceful fallback to raw string
+
     return {"final_answer": answer, "sources": notes}
 
 
