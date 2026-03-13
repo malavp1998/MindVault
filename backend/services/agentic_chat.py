@@ -11,6 +11,24 @@ from services.agent_tools import (
     search_vault, read_note,
     propose_create_note, propose_update_note, propose_delete_note
 )
+from services.llm import llm_complete
+from langsmith import traceable
+
+# ── Utilities ─────────────────────────────────────────────────
+
+@traceable(name="generate_session_title", tags=["chat", "title"])
+async def generate_session_title(first_message: str) -> str:
+    """Generate a short 4-6 word title for a chat session."""
+    prompt = (
+        "Generate a short 4-6 word title for a chat session "
+        "that starts with this message. "
+        "Return ONLY the title, nothing else.\n\n"
+        f"Message: {first_message}"
+    )
+    title = await llm_complete(prompt, "en")
+    # Clean up any quotes the LLM might add
+    return title.strip().strip('"').strip("'")[:255]
+
 
 # ── State ─────────────────────────────────────────────────────
 

@@ -29,7 +29,7 @@ export default function ChatPage() {
 
     const loadSessions = async () => {
         try {
-            const res = await api.get("/chat/sessions")
+            const res = await api.get("/agent/sessions")
             setSessions(res.data)
         } catch (e) { console.error("Failed to load sessions", e) }
     }
@@ -38,7 +38,7 @@ export default function ChatPage() {
         setLoadingHistory(true)
         setActiveSession(sessionId)
         try {
-            const res = await api.get(`/chat/sessions/${sessionId}/messages`)
+            const res = await api.get(`/agent/sessions/${sessionId}/messages`)
             setMessages(res.data)
         } catch (e) { console.error(e) }
         setLoadingHistory(false)
@@ -54,13 +54,26 @@ export default function ChatPage() {
     const deleteSession = async (sessionId, e) => {
         e.stopPropagation()
         try {
-            await api.delete(`/chat/sessions/${sessionId}`)
+            await api.delete(`/agent/sessions/${sessionId}`)
             if (activeSession === sessionId) {
                 setActiveSession(null)
                 setMessages([])
             }
             loadSessions()
         } catch (e) { console.error(e) }
+    }
+
+    const clearChatHistory = async () => {
+        if (!activeSession) return
+        if (!window.confirm("Are you sure you want to clear the chat history for this session?")) return
+        
+        try {
+            await api.delete(`/agent/sessions/${activeSession}/messages`)
+            setSessions(prev => prev.filter(s => s.id !== activeSession))
+            setActiveSession(null)
+            setMessages([])
+            loadSessions()
+        } catch (e) { console.error("Failed to clear chat history", e) }
     }
 
     const sendMessage = async () => {
@@ -139,7 +152,7 @@ export default function ChatPage() {
 
         // Fetch fresh suggestions
         try {
-            const res = await api.get("/chat/suggestions")
+            const res = await api.get("/agent/suggestions")
             const fresh = res.data.suggestions
             setSuggestions(fresh)
             localStorage.setItem("mv_suggestions", JSON.stringify({
@@ -290,6 +303,37 @@ export default function ChatPage() {
                             fontSize: "11px", color: "var(--text-muted)", margin: 0,
                         }}>Ask anything — answers grounded in your notes</p>
                     </div>
+
+                    <div style={{ flex: 1 }} />
+                    
+                    {activeSession && messages.length > 0 && !loadingHistory && (
+                        <button
+                            onClick={clearChatHistory}
+                            style={{
+                                background: "var(--bg-card-hover)",
+                                border: "1px solid var(--border)",
+                                borderRadius: "8px",
+                                padding: "6px 12px",
+                                fontSize: "12px",
+                                color: "var(--text-secondary)",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                transition: "all 0.15s",
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.borderColor = "#ef4444"
+                                e.currentTarget.style.color = "#ef4444"
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.borderColor = "var(--border)"
+                                e.currentTarget.style.color = "var(--text-secondary)"
+                            }}
+                        >
+                            🧹 Clear Chat
+                        </button>
+                    )}
                 </div>
 
                 {/* Messages */}

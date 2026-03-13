@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, delete
 from database import get_db
-from middleware.auth import get_current_user
-from models import Note, PendingAgentAction, ChatSession, ChatMessage
-from services.agentic_chat import agentic_chat_graph
+from middleware.auth import get_current_user, CurrentUser
+from models import Note, PendingAgentAction, ChatSession, ChatMessage, Topic, User
+from services.agentic_chat import agentic_chat_graph, generate_session_title
 from services.pipeline import process_note
 from services.clustering import cluster_notes
-from services.chat import generate_session_title
+from services.llm import llm_complete
 from langchain_core.messages import HumanMessage, AIMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agentic-chat"])
@@ -343,3 +343,237 @@ async def _run_recluster_background(user_id: str, db: AsyncSession):
         logging.getLogger(__name__).error(
             f"Recluster failed after agent delete: {e}"
         )
+
+
+# ── UTILITY ROUTES FROM LEGACY CHAT ───────────────────────────
+
+GENERIC_SUGGESTIONS = [
+    "What have I saved recently?",
+    "Summarize everything in my vault",
+    "What topics have I been studying?",
+    "Show me my most recent notes",
+]
+
+@router.get("/suggestions")
+async def get_chat_suggestions(
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate dynamic chat suggestions based on the user's vault content."""
+    # Fetch user's topics (top 6 by note count)
+    topic_result = await db.execute(
+        select(Topic)
+        .where(Topic.user_id == current_user.id)
+        .order_by(Topic.note_count.desc())
+        .limit(6)
+    )
+    topics = topic_result.scalars().all()
+
+    # Fetch recent processed notes (last 10)
+    note_result = await db.execute(
+        select(Note)
+        .where(Note.user_id == current_user.id, Note.processed == True)  # noqa: E712
+        .order_by(Note.created_at.desc())
+        .limit(10)
+    )
+    recent_notes = note_result.scalars().all()
+
+    # Vault is empty — return generic fallback
+    if not topics and not recent_notes:
+        return {"suggestions": GENERIC_SUGGESTIONS, "source": "fallback"}
+
+    # Build context from real vault content
+    topics_list = ", ".join([t.name for t in topics]) if topics else ""
+    notes_titles = "\n".join(
+        [f"- {n.title}" for n in recent_notes]
+    ) if recent_notes else ""
+
+    import json
+    prompt = f"""A user has a personal knowledge vault with these contents:
+
+Topics in vault: {topics_list}
+
+Recent notes saved:
+{notes_titles}
+
+Generate exactly 4 short, specific questions the user might want to ask about THEIR OWN notes and vault content.
+
+Rules:
+- Questions must be directly relevant to the topics and notes listed above
+- Keep each question under 8 words
+- Make them feel personal — use "my notes", "I saved", "I learned" etc
+- Vary the question types: one summary, one specific topic, one comparison, one recent
+- Return ONLY a JSON array of 4 strings, nothing else
+- No markdown, no backticks, just raw JSON array
+
+Example format:
+["question 1", "question 2", "question 3", "question 4"]"""
+
+    try:
+        raw = await llm_complete(prompt, "en")
+        clean = raw.strip().replace("```json", "").replace("```", "").strip()
+        suggestions = json.loads(clean)
+
+        if not isinstance(suggestions, list) or len(suggestions) < 2:
+            raise ValueError("Invalid suggestions format")
+
+        suggestions = [str(s) for s in suggestions[:4]]
+        return {"suggestions": suggestions, "source": "generated"}
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[Suggestions] LLM failed, building from topics: {e}")
+
+        fallback_from_topics = [
+            f"Summarize my {t.name} notes" for t in topics[:4]
+        ]
+        combined = fallback_from_topics + GENERIC_SUGGESTIONS
+        return {"suggestions": combined[:4], "source": "topics_fallback"}
+
+
+@router.post("/sessions")
+async def create_session(
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new chat session."""
+    session = ChatSession(user_id=current_user.id, title="New Chat")
+    db.add(session)
+    await db.flush()
+    await db.refresh(session)
+    return {
+        "id": str(session.id),
+        "title": session.title,
+        "created_at": session.created_at.isoformat(),
+        "updated_at": session.updated_at.isoformat(),
+        "message_count": 0,
+    }
+
+
+@router.get("/sessions")
+async def list_sessions(
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all chat sessions for the current user."""
+    result = await db.execute(
+        select(
+            ChatSession,
+            func.count(ChatMessage.id).label("message_count"),
+        )
+        .outerjoin(ChatMessage, ChatMessage.session_id == ChatSession.id)
+        .where(ChatSession.user_id == current_user.id)
+        .group_by(ChatSession.id)
+        .having(func.count(ChatMessage.id) > 0)
+        .order_by(ChatSession.updated_at.desc())
+    )
+    rows = result.all()
+
+    return [
+        {
+            "id": str(session.id),
+            "title": session.title,
+            "created_at": session.created_at.isoformat(),
+            "updated_at": session.updated_at.isoformat(),
+            "message_count": count,
+        }
+        for session, count in rows
+    ]
+
+
+@router.get("/sessions/{session_id}/messages")
+async def get_session_messages(
+    session_id: uuid.UUID,
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all messages in a chat session."""
+    # Verify ownership
+    session = await db.get(ChatSession, session_id)
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(404, "Session not found")
+
+    result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc())
+    )
+    messages = result.scalars().all()
+
+    # Collect all unique cited note ids from history
+    all_cited_ids = set()
+    for m in messages:
+        if m.cited_note_ids:
+            all_cited_ids.update(m.cited_note_ids)
+
+    notes_map = {}
+    if all_cited_ids:
+        # Fetch titles for cited notes
+        # Convert string UUIDs back to UUID objects for Postgres IN query
+        valid_ids = []
+        for nid in all_cited_ids:
+            try:
+                valid_ids.append(uuid.UUID(str(nid)))
+            except ValueError:
+                pass
+                
+        if valid_ids:
+            notes_res = await db.execute(
+                select(Note.id, Note.title).where(Note.id.in_(valid_ids))
+            )
+            for nid, title in notes_res.all():
+                notes_map[str(nid)] = title
+
+    out_messages = []
+    for m in messages:
+        cited_notes = []
+        c_ids = getattr(m, "cited_note_ids", None)
+        if c_ids:
+            for nid in c_ids:
+                if str(nid) in notes_map:
+                    cited_notes.append({
+                        "id": str(nid),
+                        "title": notes_map[str(nid)],
+                    })
+        
+        out_messages.append({
+            "id": str(m.id),
+            "role": m.role,
+            "content": m.content,
+            "cited_notes": cited_notes,
+            "created_at": m.created_at.isoformat(),
+        })
+
+    return out_messages
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(
+    session_id: uuid.UUID,
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a chat session and all its messages."""
+    session = await db.get(ChatSession, session_id)
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(404, "Session not found")
+    await db.delete(session)
+
+
+@router.delete("/sessions/{session_id}/messages", status_code=204)
+async def clear_session_messages(
+    session_id: uuid.UUID,
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear all messages from a chat session without deleting the session itself."""
+    session = await db.get(ChatSession, session_id)
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(404, "Session not found")
+    
+    await db.execute(
+        delete(ChatMessage).where(ChatMessage.session_id == session_id)
+    )
+    
+    session.updated_at = datetime.now(timezone.utc)
+    await db.commit()
