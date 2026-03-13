@@ -4,7 +4,7 @@ from typing import TypedDict, Literal
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 from models import PendingAgentAction
 from services.agent_tools import (
@@ -76,6 +76,89 @@ Respond with ONLY the word READ or WRITE, nothing else.
     return {**state, "intent": intent}
 
 
+# ── Token check ───────────────────────────────────────────────
+
+from config import get_settings as _get_settings
+
+def _estimate_tokens(messages: list) -> int:
+    """Rough estimate: 4 chars ≈ 1 token. Skips non-text messages."""
+    total = 0
+    for m in messages:
+        content = getattr(m, "content", None)
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            # tool result messages may have list content
+            for block in content:
+                if isinstance(block, dict):
+                    total += len(str(block))
+    return total // 4
+
+
+# ── Node 1b: Compress history if over token limit ─────────────
+
+async def compress_history(state: AgentState) -> AgentState:
+    """
+    If conversation history exceeds settings.chat_compression_threshold,
+    compress older turns into a single dense SystemMessage summary using the LLM.
+
+    Strategy (mirrors Anthropic's own approach):
+    1. Keep the last 4 messages verbatim (most recent context)
+    2. Strip ToolMessages from the older portion (they're the biggest bloat)
+    3. Ask the LLM to compress the remaining older turns into one paragraph
+    4. Replace the older portion with [SystemMessage: compressed summary]
+
+    Threshold is read from settings so it's tunable via .env:
+        CHAT_COMPRESSION_THRESHOLD=10000
+
+    This runs AFTER classify_intent so intent is already known.
+    It runs BEFORE call_agent so the LLM never sees the bloated history.
+    """
+    messages = state["messages"]
+    threshold = _get_settings().chat_compression_threshold
+
+    if _estimate_tokens(messages) <= threshold:
+        return state  # nothing to do
+
+    # Keep last 4 turns intact
+    recent = messages[-4:]
+    older = messages[:-4]
+
+    # Strip ToolMessages from older — they're stale retrieval chunks, not conversation
+    older_chat = [
+        m for m in older
+        if not isinstance(m, ToolMessage) and getattr(m, "content", None)
+    ]
+
+    if not older_chat:
+        # Nothing meaningful to compress — just drop old tool noise
+        return {**state, "messages": recent}
+
+    older_text = "\n".join(
+        f"{type(m).__name__.replace('Message','').upper()}: {m.content}"
+        for m in older_chat
+        if isinstance(m.content, str)
+    )
+
+    compression_prompt = (
+        "You are compressing a conversation history to save tokens. "
+        "Write a single dense paragraph summarising the key facts below. "
+        "Preserve: user intent, any note titles or IDs mentioned, "
+        "actions already taken, and any unresolved questions. "
+        "Drop all pleasantries and filler.\n\n"
+        f"CONVERSATION TO COMPRESS:\n{older_text}"
+    )
+
+    try:
+        summary = await llm_complete(compression_prompt, "en")
+        compressed = [SystemMessage(content=f"[Compressed earlier context]: {summary}")]
+    except Exception:
+        # If compression itself fails, fall back to just keeping recent turns
+        compressed = []
+
+    return {**state, "messages": compressed + recent}
+
+
 # ── Node 2: Call agent with tools ────────────────────────────
 
 async def call_agent(state: AgentState) -> AgentState:
@@ -96,8 +179,6 @@ IMPORTANT RULES:
 
 
 # ── Node 3: Execute tool call ─────────────────────────────────
-
-from langchain_core.messages import ToolMessage
 
 # ── Node 3: Execute tool call ─────────────────────────────────
 
@@ -223,13 +304,15 @@ def route_after_tool(state: AgentState) -> Literal["call_agent", "store_pending_
 def build_agentic_chat_graph():
     graph = StateGraph(AgentState)
     graph.add_node("classify_intent",      classify_intent)
+    graph.add_node("compress_history",     compress_history)
     graph.add_node("call_agent",           call_agent)
     graph.add_node("execute_tool",         execute_tool)
     graph.add_node("synthesize_read",      synthesize_read)
     graph.add_node("store_pending_action", store_pending_action)
 
     graph.set_entry_point("classify_intent")
-    graph.add_edge("classify_intent", "call_agent")
+    graph.add_edge("classify_intent", "compress_history")
+    graph.add_edge("compress_history", "call_agent")
     
     # After LLM speaks, it either calls a tool or generates a final answer
     graph.add_conditional_edges("call_agent", route_after_agent)

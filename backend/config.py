@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:5173"
     recluster_every_n: int = 20
+    chat_compression_threshold: int = 6000
 
     # Spaced Repetition Settings
     REVISION_THRESHOLD: int = 5

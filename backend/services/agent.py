@@ -29,38 +29,35 @@ class AgentState(TypedDict):
 
 @traceable(name="agent_search_node", tags=["agent", "retrieval"])
 async def search_node(state: AgentState) -> dict:
-    """Retrieve top-5 relevant notes from pgvector via the current query."""
-    query_embedding = await get_embedding(state["query"])
-
-    search_results = []
+    """Retrieve top-5 relevant notes from pgvector via the current query.
+    
+    SECURITY: user_id is REQUIRED. Search is always scoped to a single user.
+    Raises ValueError if user_id is missing or empty — never falls back to
+    a global unscoped query.
+    """
     user_id = state.get("user_id")
+    if not user_id:
+        raise ValueError(
+            "search_node requires a non-empty user_id in AgentState. "
+            "Unscoped global note search is not permitted."
+        )
+
+    query_embedding = await get_embedding(state["query"])
+    search_results = []
 
     async with async_session() as db:
-        if user_id:
-            result = await db.execute(
-                text("""
-                    SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
-                           1 - (embedding <=> CAST(:emb AS vector)) as similarity
-                    FROM notes
-                    WHERE embedding IS NOT NULL
-                      AND user_id = CAST(:uid AS uuid)
-                    ORDER BY embedding <=> CAST(:emb AS vector)
-                    LIMIT :top_k
-                """),
-                {"emb": str(query_embedding), "top_k": 5, "uid": user_id},
-            )
-        else:
-            result = await db.execute(
-                text("""
-                    SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
-                           1 - (embedding <=> CAST(:emb AS vector)) as similarity
-                    FROM notes
-                    WHERE embedding IS NOT NULL
-                    ORDER BY embedding <=> CAST(:emb AS vector)
-                    LIMIT :top_k
-                """),
-                {"emb": str(query_embedding), "top_k": 5},
-            )
+        result = await db.execute(
+            text("""
+                SELECT id, title, summary, tags, topic_id, source_url, is_processed, created_at,
+                       1 - (embedding <=> CAST(:emb AS vector)) as similarity
+                FROM notes
+                WHERE embedding IS NOT NULL
+                  AND user_id = CAST(:uid AS uuid)
+                ORDER BY embedding <=> CAST(:emb AS vector)
+                LIMIT :top_k
+            """),
+            {"emb": str(query_embedding), "top_k": 5, "uid": user_id},
+        )
         rows = result.all()
 
         for row in rows:
