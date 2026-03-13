@@ -65,6 +65,14 @@ async def process_note(note_id: uuid.UUID) -> None:
             parsed = json.loads(raw_summary)
             summary = parsed.get("tldr", raw_summary)
             key_concepts = parsed.get("key_concepts", [])
+            
+            # Restore insights by appending them to the summary markdown
+            insights = parsed.get("insights", [])
+            if insights and isinstance(insights, list):
+                summary += "\n\n**Key Insights:**\n"
+                for ins in insights:
+                    summary += f"- {ins}\n"
+                    
         except (json.JSONDecodeError, ValueError):
             # Fallback: raw_summary is a plain string (old cache hit or LLM error)
             summary = raw_summary

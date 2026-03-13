@@ -40,6 +40,8 @@ class AgentState(TypedDict):
     pending_action_id: str | None  # UUID of stored PendingAgentAction
     final_response: str | None     # message to send back to frontend
     compressed_summary: str | None   # rolling summary of compressed turns
+    retry_count: int
+    max_retries: int
 
 
 # ── LLM ───────────────────────────────────────────────────────
@@ -356,7 +358,7 @@ def route_after_agent(state: AgentState) -> Literal["execute_tool", "synthesize_
         return "execute_tool"
     return "synthesize_read"
 
-def route_after_tool(state: AgentState) -> Literal["call_agent", "store_pending_action"]:
+def route_after_tool(state: AgentState) -> Literal["call_agent", "store_pending_action", "synthesize_read"]:
     last_message = state["messages"][-2]  # The AIMessage that called the tool
     if not last_message.tool_calls:
          return "call_agent"
@@ -367,6 +369,18 @@ def route_after_tool(state: AgentState) -> Literal["call_agent", "store_pending_
         # force the graph to loop back to the LLM so it reads the error and can try searching.
         tool_result = state.get("tool_result")
         if tool_result and isinstance(tool_result, dict) and "error" in tool_result:
+            # Check loop prevention
+            retry = state.get("retry_count", 0)
+            max_r = state.get("max_retries", 2)
+            if retry >= max_r:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Max retries ({max_r}) reached in route_after_tool "
+                    f"for user: '{state.get('user_id')}' — forcing stop"
+                )
+                return "synthesize_read"
+                
+            state["retry_count"] = retry + 1
             return "call_agent"
             
         return "store_pending_action"

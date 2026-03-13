@@ -80,7 +80,8 @@ async def agentic_chat(
     messages.append(HumanMessage(content=request.message))
 
     try:
-        result = await agentic_chat_graph.ainvoke({
+        import asyncio
+        initial_state = {
             "messages":   messages,
             "user_id":    str(user.id),
             "intent":     None,
@@ -88,7 +89,24 @@ async def agentic_chat(
             "pending_action_id": None,
             "final_response":    None,
             "compressed_summary": None,
-        }, config={"configurable": {"db": db}})
+            "retry_count": 0,
+            "max_retries": 2,
+        }
+        result = await asyncio.wait_for(
+            agentic_chat_graph.ainvoke(initial_state, config={"configurable": {"db": db}}),
+            timeout=30.0
+        )
+    except asyncio.TimeoutError:
+        import logging
+        logging.getLogger(__name__).error(
+            f"Agentic graph timed out after 30s — user={user.id} query='{request.message}'"
+        )
+        return ChatResponse(
+            response="This is taking too long — try rephrasing.",
+            type="answer",
+            session_id=str(session_id),
+            cited_notes=[]
+        )
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Agentic Chat Error: {e}")

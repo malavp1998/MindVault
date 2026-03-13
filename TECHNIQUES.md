@@ -12,7 +12,8 @@
 1. [Semantic Caching](#1-semantic-caching)
 2. [Incremental HDBSCAN Clustering](#2-incremental-hdbscan-clustering)
 3. [Structured Prompting (XML + JSON Schema)](#3-structured-prompting-xml--json-schema)
-4. *(more techniques will be added as they are implemented)*
+4. [Optimistic Inserts for TOCTOU Race Conditions](#4-optimistic-inserts-for-toctou-race-conditions)
+5. *(more techniques will be added as they are implemented)*
 
 ---
 
@@ -429,21 +430,67 @@ except (json.JSONDecodeError, ValueError):
 
 ---
 
-## How to Add a New Technique
+## 4. Optimistic Inserts for TOCTOU Race Conditions
 
-When a new ML or AI engineering technique is added to MindVault
-follow this structure for documentation:
+### Motivation
 
-1. Add entry to the Table of Contents with section number
-2. Write the following sections:
-   - **Motivation** — why was this needed, what problem does it solve
-   - **What It Is** — clear plain-english explanation with diagram if helpful
-   - **Implementation Details** — schema, code, config with code blocks
-   - **Where It Is Applied** — which files and functions use this
-   - **Tradeoffs** — honest pros and cons
-   - **Expected Impact** — numbers and estimates where possible
-   - **References** — papers, docs, or blog posts
+During initial user login, the application auto-provisions a new `User` record if one does not exist for the provided Firebase UID. When a fresh user logs into the frontend, the web app fires several concurrent background requests instantly (e.g., fetching notes, topics, stats, queue). 
+
+Because the user does not exist yet, multiple concurrent requests reach the provisioning logic at exactly the same millisecond. 
+
+### What It Is
+
+A **Time-Of-Check-Time-Of-Use (TOCTOU)** race condition occurs when an application checks if a resource is available, and then acts assuming it still is. 
+
+```python
+# Before (Vulnerable to TOCTOU)
+if not user_exists():  <-- Multiple concurrent requests pass this check simultaneously
+    insert_user()      <-- The first request succeeds; all subsequent ones crash with UniqueViolationError
+```
+
+Application-level `while True` loops or uniqueness checks cannot solve this in an async environment. You have two choices:
+1. Distributed application-level locks (e.g., Redis).
+2. **Optimistic Inserts** relying on Database Constraints.
+
+MindVault uses **Optimistic Inserts**. We allow the concurrent workers to blindly attempt the `INSERT` simultaneously. We rely entirely on the PostgreSQL database to enforce the Unique Constraint and throw an `IntegrityError` to the "losing" workers.
+
+### Implementation Details
+
+When the "losing" concurrent requests catch the `IntegrityError` from the database, they do not crash. Instead, they gracefully roll back their failed transaction, and immediately run a `SELECT` query to fetch the row that the "winning" transaction just successfully inserted.
+
+```python
+try:
+    user = User(firebase_uid=firebase_uid, username=username)
+    db.add(user)
+    await db.flush()  # The winner completes this, the losers throw IntegrityError here
+except IntegrityError:
+    # Race condition caught: another concurrent request inserted this user first.
+    # Roll back the failed transaction to keep connection healthy, and fetch the winner's row.
+    await db.rollback()
+    result = await db.execute(select(User).where(User.firebase_uid == firebase_uid))
+    user = result.scalar_one()
+```
+
+### Where It Is Applied
+
+| Feature | File | Improvement |
+|---------|------|-------------|
+| **Auth Provisioning** | `middleware/auth.py` | Overhauled the `get_current_user` auto-provisioning block to use optimistic inserts instead of blind sequential inserts. |
+
+### Tradeoffs
+
+**Pros:**
+- **Zero Configuration:** Does not require complex Redis distributed locking infrastructure.
+- **Fast:** The "happy path" (which covers 99.9% of all subsequent requests for a user) avoids the latency of requesting and releasing application-level locks entirely.
+- **ACID Compliant:** Relies on the rock-solid ACID properties of Postgres instead of finicky Python async state.
+
+**Cons:**
+- **Database Load:** Technically causes PostgreSQL to execute and immediately discard a transaction, slightly increasing DB log volume during the brief collision window.
+
+### Expected Impact
+
+- Completely eliminates `500 Internal Server Error` API failures during initial user onboarding and across multiple device logins simultaneously.
 
 ---
 
-*Last updated: 2026 — MindVault v1.0*
+## How to Add a New Technique

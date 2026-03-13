@@ -233,16 +233,19 @@ Output:"""
     # Parse structured response — extract tldr as the stored summary,
     # return full parsed object so pipeline.py can pluck key_concepts directly
     try:
+        import re
         cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.split("\n")
-            cleaned = "\n".join(lines[1:-1])
+        # Find the first { and last } to extract the JSON object
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        if match:
+            cleaned = match.group(0)
+            
         parsed = json.loads(cleaned)
         tldr = parsed.get("tldr", "").strip()
         # Stash key_concepts on the parsed object so pipeline.py can use them
         # without a second LLM call (see Change 4 — pipeline.py)
         result = json.dumps(parsed)   # store full object in cache
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError, Exception):
         # Fallback: treat the raw response as a plain summary string
         tldr = raw.strip()
         result = raw

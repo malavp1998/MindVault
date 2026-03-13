@@ -76,11 +76,25 @@ async def get_current_user(
                 break
             username = f"{base_username}{suffix}"
             suffix += 1
-        user = User(firebase_uid=firebase_uid, username=username, email=email or None)
-        db.add(user)
-        await db.flush()
-        await db.refresh(user)
-        logger.info(f"Auto-provisioned new user: {username} (uid={firebase_uid})")
+            
+        try:
+            from sqlalchemy.exc import IntegrityError
+            user = User(firebase_uid=firebase_uid, username=username, email=email or None)
+            db.add(user)
+            await db.flush()
+            await db.refresh(user)
+            logger.info(f"Auto-provisioned new user: {username} (uid={firebase_uid})")
+        except IntegrityError:
+            # Race condition: another concurrent request inserted this user first.
+            # Roll back the failed transaction and fetch the row the winner inserted.
+            await db.rollback()
+            result = await db.execute(select(User).where(User.firebase_uid == firebase_uid))
+            user = result.scalar_one_or_none()
+            if not user:
+                # firebase_uid constraint violated (not username) — genuinely unexpected
+                logger.error(f"User provisioning conflict unresolvable for firebase_uid={firebase_uid}")
+                raise HTTPException(status_code=500, detail="User provisioning conflict")
+            logger.info(f"Race resolved: returning existing user {user.username} (uid={firebase_uid})")
 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
