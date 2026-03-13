@@ -84,10 +84,11 @@ export default function ChatPage() {
 
             const res = await api.post("/agent/chat", {
                 message: userMessage,
-                conversation_history: history
+                conversation_history: history,
+                ...(activeSession ? { session_id: activeSession } : {})
             })
             
-            const { response: answer, type, pending_action, cited_notes } = res.data
+            const { response: answer, type, pending_action, cited_notes, session_id } = res.data
 
             setMessages(prev => [...prev, {
                 id: "ai-" + Date.now(),
@@ -98,7 +99,11 @@ export default function ChatPage() {
                 cited_notes: cited_notes || [],
                 created_at: new Date().toISOString()
             }])
-            // Not calling loadSessions() here because agentic chat doesn't persist to sessions yet
+            
+            if (session_id && activeSession !== session_id) {
+                setActiveSession(session_id)
+            }
+            loadSessions()
         } catch (err) {
             setMessages(prev => [...prev, {
                 id: "err-" + Date.now(),

@@ -1,17 +1,18 @@
 import uuid
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
 from middleware.auth import get_current_user
-from models import Note, PendingAgentAction
+from models import Note, PendingAgentAction, ChatSession, ChatMessage
 from services.agentic_chat import agentic_chat_graph
 from services.pipeline import process_note
 from services.clustering import cluster_notes
-from langchain_core.messages import HumanMessage
+from services.chat import generate_session_title
+from langchain_core.messages import HumanMessage, AIMessage
 
 router = APIRouter(prefix="/api/agent", tags=["agentic-chat"])
 
@@ -23,6 +24,7 @@ from typing import Optional, List, Dict
 class ChatRequest(BaseModel):
     message: str
     conversation_history: List[Dict] = []   # [{role, content}, ...]
+    session_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -30,6 +32,7 @@ class ChatResponse(BaseModel):
     type: str                               # "answer" | "pending_confirmation"
     pending_action: Optional[Dict] = None      # only set when type == "pending_confirmation"
     cited_notes: Optional[List[Dict]] = None
+    session_id: Optional[str] = None
 
 # ── POST /api/agent/chat ──────────────────────────────────────
 
@@ -39,7 +42,42 @@ async def agentic_chat(
     db: AsyncSession = Depends(get_db),
     user = Depends(get_current_user)
 ):
-    messages = [HumanMessage(content=request.message)]
+    session_id = None
+    session = None
+    if request.session_id:
+        try:
+            session_id = uuid.UUID(request.session_id)
+            session = await db.get(ChatSession, session_id)
+            if not session or session.user_id != user.id:
+                raise HTTPException(404, "Session not found")
+        except ValueError:
+            pass
+            
+    if not session:
+        session = ChatSession(user_id=user.id, title="New Chat")
+        db.add(session)
+        await db.flush()
+        await db.refresh(session)
+        session_id = session.id
+        
+    user_msg = ChatMessage(
+        session_id=session_id,
+        role="user",
+        content=request.message,
+    )
+    db.add(user_msg)
+    await db.flush()
+
+    messages = []
+    for msg in request.conversation_history:
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        elif role == "assistant":
+            messages.append(AIMessage(content=content))
+            
+    messages.append(HumanMessage(content=request.message))
 
     try:
         result = await agentic_chat_graph.ainvoke({
@@ -55,25 +93,56 @@ async def agentic_chat(
         logging.getLogger(__name__).error(f"Agentic Chat Error: {e}")
         return ChatResponse(
             response="I'm sorry, an internal error occurred while processing your request.",
-            type="answer"
+            type="answer",
+            session_id=str(session_id)
         )
     # READ path — return answer directly
     if result["final_response"] != "__PENDING_CONFIRMATION__":
         cited_notes = []
+        cited_note_ids = []
         tool_res = result.get("tool_result")
         
         if isinstance(tool_res, list):
             for item in tool_res:
                 if isinstance(item, dict) and "id" in item and "title" in item:
                     cited_notes.append({"id": item["id"], "title": item["title"]})
+                    try:
+                        valid_uuid = uuid.UUID(item["id"])
+                        cited_note_ids.append(str(valid_uuid))
+                    except ValueError:
+                        pass
         elif isinstance(tool_res, dict):
             if "id" in tool_res and "title" in tool_res:
                 cited_notes.append({"id": tool_res["id"], "title": tool_res["title"]})
+                try:
+                    valid_uuid = uuid.UUID(tool_res["id"])
+                    cited_note_ids.append(str(valid_uuid))
+                except ValueError:
+                    pass
+
+        assistant_msg = ChatMessage(
+            session_id=session_id,
+            role="assistant",
+            content=result["final_response"],
+            cited_note_ids=cited_note_ids if cited_note_ids else None
+        )
+        db.add(assistant_msg)
+        
+        if session.title == "New Chat" and len(request.conversation_history) == 0:
+            try:
+                title = await generate_session_title(request.message)
+                session.title = title
+            except Exception:
+                pass
+        
+        session.updated_at = datetime.now(timezone.utc)
+        await db.commit()
 
         return ChatResponse(
             response=result["final_response"],
             type="answer",
-            cited_notes=cited_notes
+            cited_notes=cited_notes,
+            session_id=str(session_id)
         )
 
     # WRITE path — fetch pending action and return preview to frontend
@@ -83,6 +152,23 @@ async def agentic_chat(
     )
     action = action_result.scalar_one()
 
+    assistant_msg = ChatMessage(
+        session_id=session_id,
+        role="assistant",
+        content=action.preview_message
+    )
+    db.add(assistant_msg)
+    
+    if session.title == "New Chat" and len(request.conversation_history) == 0:
+        try:
+            title = await generate_session_title(request.message)
+            session.title = title
+        except Exception:
+            pass
+
+    session.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
     return ChatResponse(
         response=action.preview_message,
         type="pending_confirmation",
@@ -91,7 +177,8 @@ async def agentic_chat(
             "type":    action.action_type,
             "message": action.preview_message,
             "diff":    action.payload.get("diff"),
-        }
+        },
+        session_id=str(session_id)
     )
 
 

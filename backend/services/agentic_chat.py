@@ -18,7 +18,7 @@ class AgentState(TypedDict):
     messages: list
     user_id: str
     intent: str                    # "read" or "write"
-    tool_result: dict | None       # result from tool call
+    tool_result: dict | list | None # result from tool call
     pending_action_id: str | None  # UUID of stored PendingAgentAction
     final_response: str | None     # message to send back to frontend
 
@@ -67,11 +67,11 @@ You are MindVault's AI agent. The user's vault belongs to user_id: {state["user_
 You have access to tools to search and manage their notes.
 
 IMPORTANT RULES:
-- For READ requests: call search_vault or read_note and return a helpful answer.
+- For READ requests: call search_vault or read_note and return a concise, precise answer. ONLY use information from the tool results that directly answers the user's specific query. IGNORE any irrelevant search results or extra notes returned that do not directly pertain to the user's question. DO NOT summarize all search results if they are not relevant.
 - For WRITE requests: call the appropriate propose_* tool which returns a PREVIEW.
   Do NOT execute writes directly. The propose_* tools only generate a preview.
 - For UPDATE or DELETE requests: you MUST use the exact `id` field (a UUID string) returned from search_vault or read_note as your `note_id` argument! Do not pass the note title or topic as the note_id!
-- Always be specific about what you are doing or proposing.
+- Always be specific about what you are doing or proposing. Do not hallucinate note content.
     """)
     response = await llm_with_tools.ainvoke([system] + state["messages"])
     return {**state, "messages": state["messages"] + [response]}
@@ -99,12 +99,32 @@ async def execute_tool(state: AgentState) -> AgentState:
 
     result = await tool_map[tool_name].ainvoke(tool_args)
     
-    # Store result for `store_pending_action` if it was a WRITE tool
-    tool_result = result if tool_name in [t.name for t in WRITE_TOOLS] else None
-    
     # Format for Langchain to continue reasoning
     tool_msg = ToolMessage(content=json.dumps(result), tool_call_id=tool_call["id"])
     
+    # Accumulate read tool results for cited_notes, otherwise just store the latest result
+    if tool_name in [t.name for t in READ_TOOLS]:
+        current_res = state.get("tool_result")
+        
+        res_list = []
+        if isinstance(current_res, list):
+            res_list = list(current_res)
+        elif isinstance(current_res, dict):
+            res_list = [current_res]
+            
+        new_res = result if isinstance(result, list) else [result]
+        
+        # De-duplicate by ID
+        seen_ids = {x.get("id") for x in res_list if isinstance(x, dict) and "id" in x}
+        combined = list(res_list)
+        for x in new_res:
+            if isinstance(x, dict) and "id" in x and x["id"] not in seen_ids:
+                combined.append(x)
+                seen_ids.add(x["id"])
+        tool_result = combined
+    else:
+        tool_result = result
+        
     return {**state, "messages": state["messages"] + [tool_msg], "tool_result": tool_result}
 
 
@@ -117,7 +137,8 @@ async def synthesize_read(state: AgentState) -> AgentState:
         return {**state, "final_response": last_message.content}
         
     system = SystemMessage(content="""
-You are MindVault's AI assistant. Use the conversation history and search results to answer the user's question.
+You are MindVault's AI assistant. Answer the user's question using ONLY the provided search results that are directly relevant.
+IGNORE any search results that do not pertain to the specific question asked. Do NOT summarize all search results if they are not relevant to the user's query.
 Be concise and cite the note title or topic when referencing information (do NOT show raw note IDs to the user).
     """)
     response = await llm.ainvoke([system] + state["messages"])
@@ -128,13 +149,13 @@ Be concise and cite the note title or topic when referencing information (do NOT
 
 async def store_pending_action(state: AgentState, config: RunnableConfig) -> AgentState:
     db: AsyncSession = config["configurable"]["db"]
-    preview = state["tool_result"]
-    if not preview:
+    preview = state.get("tool_result")
+    if not preview or not isinstance(preview, dict):
         return {**state, "final_response": "I couldn't generate a preview for that action."}
 
     if "error" in preview:
         # If the tool failed validation, we don't store it. We ask the LLM to try again.
-        return {**state, "final_response": preview["error"]}
+        return {**state, "final_response": str(preview["error"])}
 
     action = PendingAgentAction(
         user_id=state["user_id"],
