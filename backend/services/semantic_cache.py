@@ -21,8 +21,13 @@ async def get_cached_response(
     query: str,
     cache_key: str,
     user_id: str | None = None,
+    bypass_cache: bool = False,
 ) -> str | None:
     """Check cache for a semantically similar query. Returns cached response or None."""
+    if bypass_cache:
+        logger.info(f"[SemanticCache] BYPASS key={cache_key}")
+        return None
+
     try:
         query_embedding = await get_embedding(query)
 

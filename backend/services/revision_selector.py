@@ -120,11 +120,10 @@ async def update_retention_scores():
             SET
                 estimated_retention = LEAST(1.0, GREATEST(0.0,
                     EXP(
-                        -(EXTRACT(EPOCH FROM (NOW() - last_reviewed_at)) / 86400.0)
+                        -(EXTRACT(EPOCH FROM (NOW() - COALESCE(last_reviewed_at, created_at))) / 86400.0)
                         / GREATEST(stability, 1.0)
                     )
                 )),
                 updated_at = NOW()
-            WHERE last_reviewed_at IS NOT NULL
         """))
         await db.commit()

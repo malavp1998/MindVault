@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 @traceable(name="process_note_pipeline", tags=["pipeline", "ingestion"], metadata={"pipeline_version": "1.0"})
-async def process_note(note_id: uuid.UUID) -> None:
+async def process_note(note_id: uuid.UUID, bypass_cache: bool = False) -> None:
     """Full AI processing pipeline for a note. Runs asynchronously."""
 
     # --- Step 1: Load the note in a fresh, clean read-only session ---
@@ -59,7 +59,7 @@ async def process_note(note_id: uuid.UUID) -> None:
     key_concepts: list[str] = []
     lang = detect_language(content)
     try:
-        raw_summary = await generate_summary(content, title=title, content_language=lang)
+        raw_summary = await generate_summary(content, title=title, content_language=lang, bypass_cache=bypass_cache)
         try:
             parsed = json.loads(raw_summary)
 
@@ -104,7 +104,7 @@ async def process_note(note_id: uuid.UUID) -> None:
             
             # --- Auto Tags ---
             try:
-                auto_tags = await generate_tags(content, lang)
+                auto_tags = await generate_tags(content, lang, bypass_cache=bypass_cache)
                 note.auto_tags = auto_tags
             except Exception as e:
                 logger.warning(f"Auto-tagging failed: {e}")

@@ -30,7 +30,7 @@ export default function NotePage() {
     }, [id]);
 
     async function loadNote() {
-        setLoading(true);
+        setLoading(!note); // only show full loading overlay if we don't have the note yet
         try {
             const data = await getNote(id);
             setNote(data);
@@ -41,12 +41,21 @@ export default function NotePage() {
         }
     }
 
+    // Poll if note is currently being processed
+    useEffect(() => {
+        let timer;
+        if (note && note.is_processed === false) {
+            timer = setTimeout(loadNote, 3000);
+        }
+        return () => clearTimeout(timer);
+    }, [note?.is_processed, id]);
+
     async function handleReprocess() {
         setProcessing(true);
         try {
             await processNote(id);
-            // Poll for completion
-            setTimeout(loadNote, 3000);
+            // Fetch immediately to get the updated is_processed=False state
+            await loadNote();
         } catch (err) {
             console.error('Processing failed:', err);
         } finally {
@@ -201,14 +210,14 @@ export default function NotePage() {
                     {!note.is_processed && <span className="processing-badge">Processing</span>}
                     <button
                         onClick={handleReprocess}
-                        disabled={processing}
+                        disabled={processing || (note && !note.is_processed)}
                         style={{
                             background: 'var(--bg-card-hover)', border: '1px solid var(--border)',
                             color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: 6,
                             fontSize: 12, cursor: 'pointer',
                         }}
                     >
-                        {processing ? '⏳ Processing...' : '🔄 Reprocess'}
+                        {processing || (note && !note.is_processed) ? '⏳ Processing...' : '🔄 Reprocess'}
                     </button>
                     <button
                         onClick={handleDelete}

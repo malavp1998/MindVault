@@ -12,10 +12,10 @@ settings = get_settings()
 
 
 @traceable(name="generate_tags", tags=["pipeline", "tagging"])
-async def generate_tags(content: str, lang: str) -> list[str]:
+async def generate_tags(content: str, lang: str, bypass_cache: bool = False) -> list[str]:
     """Uses LLM to automatically generate 3-5 relevant tags for the note content."""
     cache_query = content[:500]
-    cached = await get_cached_response(cache_query, cache_key="tags")
+    cached = await get_cached_response(cache_query, cache_key="tags", bypass_cache=bypass_cache)
     if cached:
         return [t.strip() for t in cached.split(",") if t.strip()]
 

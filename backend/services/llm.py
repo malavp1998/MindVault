@@ -167,12 +167,12 @@ async def llm_complete_with_history(messages: list, lang: str | None = None) -> 
 # ── TASK SPECIFIC FUNCTIONS ───────────────────────────
 
 @traceable(name="generate_summary", tags=["pipeline", "summarization"])
-async def generate_summary(content: str, title: str = "", content_language: str | None = None) -> str:
+async def generate_summary(content: str, title: str = "", content_language: str | None = None, bypass_cache: bool = False) -> str:
     """Antigravity summary — no length limits, no sentence caps, full depth."""
     lang = content_language or detect_language(content)
     cache_query = content[:500]
 
-    cached = await get_cached_response(cache_query, cache_key="summary")
+    cached = await get_cached_response(cache_query, cache_key="summary", bypass_cache=bypass_cache)
     if cached:
         return cached
 
@@ -290,10 +290,10 @@ Output:"""
 
 
 @traceable(name="extract_concepts", tags=["pipeline", "concepts"])
-async def extract_concepts(content: str) -> list[str]:
+async def extract_concepts(content: str, bypass_cache: bool = False) -> list[str]:
     """Extract key concepts and entities from the content."""
     cache_query = content[:500]
-    cached = await get_cached_response(cache_query, cache_key="concepts")
+    cached = await get_cached_response(cache_query, cache_key="concepts", bypass_cache=bypass_cache)
     if cached:
         try:
             return json.loads(cached)
@@ -412,12 +412,12 @@ Output:"""
 
 
 @traceable(name="generate_topic_name", tags=["pipeline", "clustering"])
-async def generate_topic_name(contents: list[str]) -> str:
+async def generate_topic_name(contents: list[str], bypass_cache: bool = False) -> str:
     """Generate a descriptive name for a topic cluster given sample contents."""
     samples = "\n---\n".join(c[:500] for c in contents[:5])
     cache_query = samples[:500]
 
-    cached = await get_cached_response(cache_query, cache_key="topic_name")
+    cached = await get_cached_response(cache_query, cache_key="topic_name", bypass_cache=bypass_cache)
     if cached:
         return cached
 
@@ -428,12 +428,12 @@ async def generate_topic_name(contents: list[str]) -> str:
 
 
 @traceable(name="summarize_youtube_video", tags=["pipeline", "youtube"])
-async def summarize_youtube_video(transcript: str, content_language: str | None = None) -> str:
+async def summarize_youtube_video(transcript: str, content_language: str | None = None, bypass_cache: bool = False) -> str:
     """Summarize a YouTube video transcript into structured points natively in the requested language."""
     lang = content_language or detect_language(transcript)
     cache_query = transcript[:500]
 
-    cached = await get_cached_response(cache_query, cache_key="summary")
+    cached = await get_cached_response(cache_query, cache_key="summary", bypass_cache=bypass_cache)
     if cached:
         return cached
 

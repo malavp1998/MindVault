@@ -556,7 +556,10 @@ async def trigger_processing(
     if not note or note.user_id != current_user.id:
         raise HTTPException(404, "Note not found")
 
-    background_tasks.add_task(process_note, note.id)
+    note.is_processed = False
+    await db.commit()
+
+    background_tasks.add_task(process_note, note.id, bypass_cache=True)
     return {"message": "Processing started", "note_id": str(note_id)}
 
 
