@@ -28,7 +28,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class TrustHostMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request.scope["headers"] = [
+            (k, v) for k, v in request.scope["headers"]
+            if k.lower() != b"host"
+        ] + [(b"host", b"mindvault-wspy.onrender.com")]
+        return await call_next(request)
+
 mcp_app = mcp.streamable_http_app()
+mcp_app.add_middleware(TrustHostMiddleware)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -82,8 +94,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS — allow dashboard, extension, and localhost origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"(http://localhost:\d+|https://.*\.vercel\.app|https://.*\.onrender\.com|chrome-extension://.*)",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
