@@ -4,10 +4,21 @@ from __future__ import annotations
 import uuid
 from mcp.server.fastmcp import FastMCP
 
-# Patch host validation to allow Render deployment
+# Disable host header validation for Render deployment
 try:
-    from mcp.server import transport_security
-    transport_security._is_valid_host = lambda host, allowed: True
+    import mcp.server.streamable_http as _sh
+    if hasattr(_sh, 'StreamableHTTPServerTransport'):
+        _orig_init = _sh.StreamableHTTPServerTransport.__init__
+        def _patched_init(self, *args, **kwargs):
+            _orig_init(self, *args, **kwargs)
+            self._is_valid_host = lambda host: True
+        _sh.StreamableHTTPServerTransport.__init__ = _patched_init
+except Exception:
+    pass
+
+try:
+    from mcp.server import transport_security as _ts
+    _ts.is_valid_host = lambda host, allowed_hosts: True
 except Exception:
     pass
 
