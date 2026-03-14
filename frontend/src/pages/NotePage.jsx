@@ -23,6 +23,9 @@ export default function NotePage() {
     const [suggestingTags, setSuggestingTags] = useState(false);
     const [suggestedTags, setSuggestedTags] = useState([]);
 
+    // UI state
+    const [showContent, setShowContent] = useState(false);
+
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -34,6 +37,13 @@ export default function NotePage() {
         try {
             const data = await getNote(id);
             setNote(data);
+            
+            // Default content to hidden if we already have a generated summary
+            if (data.summary) {
+                setShowContent(false);
+            } else {
+                setShowContent(true);
+            }
         } catch (err) {
             console.error('Failed to load note:', err);
         } finally {
@@ -365,42 +375,55 @@ export default function NotePage() {
 
             {/* Content */}
             <div className="note-section">
-                <h3 className="note-section-title">📄 Content</h3>
-                {isEditing ? (
-                    <div style={{ marginBottom: 16 }}>
-                        <div style={{ position: 'relative' }}>
-                            <RichTextEditor 
-                                content={editContent} 
-                                onChange={setEditContent} 
-                            />
+                <div 
+                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none', marginBottom: showContent || isEditing ? 12 : 0 }}
+                    onClick={() => setShowContent(!showContent)}
+                >
+                    <h3 className="note-section-title" style={{ margin: 0 }}>📄 Content</h3>
+                    {!isEditing && (
+                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                            {showContent ? '▼ Hide' : '▶ Show'}
+                        </span>
+                    )}
+                </div>
+
+                {(showContent || isEditing) && (
+                    isEditing ? (
+                        <div style={{ marginBottom: 16, marginTop: 12 }}>
+                            <div style={{ position: 'relative' }}>
+                                <RichTextEditor 
+                                    content={editContent} 
+                                    onChange={setEditContent} 
+                                />
+                            </div>
+                            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                                <button
+                                    onClick={handleSaveEdit}
+                                    disabled={isSaving}
+                                    style={{
+                                        background: 'var(--accent)', color: '#fff', border: 'none',
+                                        padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
+                                        fontWeight: 500
+                                    }}
+                                >
+                                    {isSaving ? 'Saving...' : '💾 Save Changes'}
+                                </button>
+                                <button
+                                    onClick={() => setIsEditing(false)}
+                                    disabled={isSaving}
+                                    style={{
+                                        background: 'var(--bg-card-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
+                                        padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
+                                        fontWeight: 500
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
-                        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                            <button
-                                onClick={handleSaveEdit}
-                                disabled={isSaving}
-                                style={{
-                                    background: 'var(--accent)', color: '#fff', border: 'none',
-                                    padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
-                                    fontWeight: 500
-                                }}
-                            >
-                                {isSaving ? 'Saving...' : '💾 Save Changes'}
-                            </button>
-                            <button
-                                onClick={() => setIsEditing(false)}
-                                disabled={isSaving}
-                                style={{
-                                    background: 'var(--bg-card-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
-                                    padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
-                                    fontWeight: 500
-                                }}
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="note-detail-content tiptap-render" dangerouslySetInnerHTML={{ __html: note.content }} />
+                    ) : (
+                        <div className="note-detail-content tiptap-render" style={{ marginTop: 12 }} dangerouslySetInnerHTML={{ __html: note.content }} />
+                    )
                 )}
             </div>
 
