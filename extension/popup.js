@@ -185,6 +185,8 @@ async function handleSavePage() {
 
     // get page content via content script
     let content = ""
+    let extractedTitle = currentTab?.title || "Untitled"
+    
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
 
@@ -197,25 +199,107 @@ async function handleSavePage() {
         const results = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: () => {
-                // use Readability if available else fallback to body text
                 if (typeof Readability !== "undefined") {
                     const doc = document.cloneNode(true)
                     const reader = new Readability(doc)
                     const article = reader.parse()
-                    return (article?.content || document.body.innerHTML)
+
+                    if (!article) {
+                        return {
+                            title: document.title,
+                            content: document.body.innerText
+                                .replace(/\n{3,}/g, '\n\n')
+                                .trim()
+                        }
+                    }
+
+                    // Extract structured fields from Readability result
+                    const title = article.title || document.title
+                    const byline = article.byline || ''
+                    const siteName = article.siteName || window.location.hostname
+                    const excerpt = article.excerpt || ''
+
+                    // Convert article.content HTML into structured plain text
+                    const div = document.createElement('div')
+                    div.innerHTML = article.content || document.body.innerHTML
+
+                    // Convert HTML elements to markdown-style plain text
+                    div.querySelectorAll('h1').forEach(el =>
+                        el.replaceWith(`\n\n# ${el.textContent.trim()}\n`))
+                    div.querySelectorAll('h2').forEach(el =>
+                        el.replaceWith(`\n\n## ${el.textContent.trim()}\n`))
+                    div.querySelectorAll('h3, h4, h5, h6').forEach(el =>
+                        el.replaceWith(`\n\n### ${el.textContent.trim()}\n`))
+                    div.querySelectorAll('p').forEach(el =>
+                        el.replaceWith(`\n\n${el.textContent.trim()}`))
+                    div.querySelectorAll('li').forEach(el =>
+                        el.replaceWith(`\n- ${el.textContent.trim()}`))
+                    div.querySelectorAll('blockquote').forEach(el =>
+                        el.replaceWith(`\n\n> ${el.textContent.trim()}\n`))
+                    div.querySelectorAll('pre, code').forEach(el =>
+                        el.replaceWith(`\n\`${el.textContent.trim()}\`\n`))
+                    div.querySelectorAll('a').forEach(el =>
+                        el.replaceWith(el.textContent.trim()))
+                    div.querySelectorAll('img').forEach(el => el.remove())
+
+                    // Clean up the resulting plain text
+                    const rawText = div.textContent
+                        .replace(/\n{3,}/g, '\n\n')
+                        .replace(/[ \t]+/g, ' ')
+                        .replace(/^\s+|\s+$/gm, '')
+                        .trim()
+
+                    // Build formatted note with metadata header
+                    const date = new Date().toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                    })
+
+                    const metaHeader = [
+                        `Source: ${siteName}`,
+                        byline ? `Author: ${byline}` : null,
+                        `Saved: ${date}`,
+                        excerpt ? `Summary: ${excerpt}` : null,
+                    ].filter(Boolean).join('\n')
+
+                    const formatted = `${metaHeader}\n\n---\n\n${rawText}`
+
+                    return { title, content: formatted }
                 }
-                return document.body.innerText
+
+                // Fallback: Readability not available — return cleaned innerText
+                return {
+                    title: document.title,
+                    content: document.body.innerText
+                        .replace(/\n{3,}/g, '\n\n')
+                        .replace(/[ \t]+/g, ' ')
+                        .replace(/^\s+|\s+$/gm, '')
+                        .trim()
+                }
             }
         })
-        content = results[0]?.result || ""
+
+        const rawResult = results?.[0]?.result
+        
+        if (rawResult && typeof rawResult === 'object') {
+            content = rawResult.content || ''
+            extractedTitle = rawResult.title || extractedTitle
+        } else if (typeof rawResult === 'string') {
+            content = rawResult
+        }
+        
+        // Apply the 200k character cap AFTER formatting
+        content = content.slice(0, 200000)
+        
     } catch (e) {
         content = currentTab?.title || ""
     }
 
     const result = await sendMessage({
         type: "SAVE_NOTE",
-        content: content.slice(0, 200000),
-        title: currentTab?.title || "Untitled",
+        content: content,
+        title: extractedTitle,
         sourceUrl: currentTab?.url || "",
         annotation,
         userTags
