@@ -1,4 +1,4 @@
-const ENV = "local"; // Managed by sync-env.js
+const ENV = "production"; // Managed by sync-env.js
 
 const CONFIG = {
     local: {
