@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { api } from "../api"
+import { api, submitVote } from "../api"
 import ConfirmationCard from "../components/ConfirmationCard"
 
 const FALLBACK_SUGGESTIONS = [
@@ -455,8 +455,13 @@ export default function ChatPage() {
 
                     {/* Message bubbles */}
                     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                        {messages.map(msg => (
-                            <MessageBubble key={msg.id} message={msg} setMessages={setMessages} />
+                        {messages.map((msg, idx) => (
+                            <MessageBubble 
+                                key={msg.id} 
+                                message={msg} 
+                                setMessages={setMessages}
+                                prevMessage={idx > 0 ? messages[idx - 1] : null}
+                            />
                         ))}
                     </div>
 
@@ -572,9 +577,25 @@ export default function ChatPage() {
     )
 }
 
-function MessageBubble({ message, setMessages }) {
+function MessageBubble({ message, setMessages, prevMessage }) {
+    const [votes, setVotes] = useState({})
     const isUser = message.role === "user"
     const citedNotes = message.cited_notes?.filter(Boolean) || []
+
+    const queryText = prevMessage?.role === 'user' ? prevMessage.content : ''
+
+    const handleVote = async (e, noteId, voteValue) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (votes[noteId] || !queryText) return
+        
+        try {
+            await submitVote(queryText, noteId, voteValue)
+            setVotes(prev => ({ ...prev, [noteId]: voteValue }))
+        } catch (err) {
+            console.error('Failed to submit vote:', err)
+        }
+    }
 
     return (
         <div style={{
@@ -681,6 +702,28 @@ function MessageBubble({ message, setMessages }) {
                                             {Math.round(note.similarity * 100)}%
                                         </span>
                                     )}
+                                    <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto', paddingLeft: '8px', borderLeft: '1px solid var(--border)' }}>
+                                        <button
+                                            onClick={(e) => handleVote(e, note.id, 1)}
+                                            style={{
+                                                background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+                                                opacity: votes[note.id] === undefined || votes[note.id] === 1 ? 1 : 0.3,
+                                                filter: votes[note.id] === 1 ? 'drop-shadow(0 0 2px rgba(74,222,128,0.5))' : 'grayscale(1)',
+                                                fontSize: '11px', transition: 'all 0.2s'
+                                            }}
+                                            title="Relevant source"
+                                        >👍</button>
+                                        <button
+                                            onClick={(e) => handleVote(e, note.id, -1)}
+                                            style={{
+                                                background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+                                                opacity: votes[note.id] === undefined || votes[note.id] === -1 ? 1 : 0.3,
+                                                filter: votes[note.id] === -1 ? 'drop-shadow(0 0 2px rgba(248,113,113,0.5))' : 'grayscale(1)',
+                                                fontSize: '11px', transition: 'all 0.2s'
+                                            }}
+                                            title="Not relevant"
+                                        >👎</button>
+                                    </div>
                                 </a>
                             ))}
                         </div>

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { searchNotes } from '../api';
+import { searchNotes, submitVote } from '../api';
 import ReactMarkdown from 'react-markdown';
 
 export default function SearchPage() {
@@ -9,7 +9,20 @@ export default function SearchPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [synthesize, setSynthesize] = useState(false);
+    const [votes, setVotes] = useState({});
     const navigate = useNavigate();
+
+    const handleVote = async (e, noteId, voteValue) => {
+        e.stopPropagation(); // prevent card click
+        if (votes[noteId]) return; // already voted
+        
+        try {
+            await submitVote(query, noteId, voteValue);
+            setVotes(prev => ({ ...prev, [noteId]: voteValue }));
+        } catch (err) {
+            console.error('Failed to submit vote:', err);
+        }
+    };
 
     const handleSearch = useCallback(async (e) => {
         e?.preventDefault();
@@ -144,9 +157,33 @@ export default function SearchPage() {
                                             </div>
                                         )}
                                     </div>
-                                    <span className="similarity-badge" style={{ marginLeft: 12, flexShrink: 0 }}>
-                                        {(result.similarity * 100).toFixed(0)}%
-                                    </span>
+                                    <div style={{ marginLeft: 12, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                                        <span className="similarity-badge" style={{ marginLeft: 0 }}>
+                                            {(result.similarity * 100).toFixed(0)}%
+                                        </span>
+                                        <div style={{ display: 'flex', gap: 4 }}>
+                                            <button 
+                                                onClick={(e) => handleVote(e, result.note.id, 1)}
+                                                style={{ 
+                                                    background: 'none', border: 'none', cursor: 'pointer', 
+                                                    opacity: votes[result.note.id] === undefined || votes[result.note.id] === 1 ? 1 : 0.3,
+                                                    filter: votes[result.note.id] === 1 ? 'drop-shadow(0 0 4px rgba(74,222,128,0.5))' : 'grayscale(1)',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                title="Relevent result"
+                                            >👍</button>
+                                            <button 
+                                                onClick={(e) => handleVote(e, result.note.id, -1)}
+                                                style={{ 
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    opacity: votes[result.note.id] === undefined || votes[result.note.id] === -1 ? 1 : 0.3,
+                                                    filter: votes[result.note.id] === -1 ? 'drop-shadow(0 0 4px rgba(248,113,113,0.5))' : 'grayscale(1)',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                title="Not relevant"
+                                            >👎</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="card-meta">
                                     <span>{new Date(result.note.created_at).toLocaleDateString()}</span>

@@ -70,4 +70,9 @@ export const sendChatMessage = (message, sessionId = null) =>
 export const deleteChatSession = (sessionId) =>
     api.delete(`/chat/sessions/${sessionId}`);
 
+// ─── Eval ──────────────────────────────────────────────────────
+
+export const submitVote = (query_text, note_id, vote) =>
+    api.post('/eval/vote', { query_text, note_id, vote }).then(r => r.data);
+
 export default api;
