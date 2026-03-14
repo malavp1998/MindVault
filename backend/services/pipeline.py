@@ -59,22 +59,30 @@ async def process_note(note_id: uuid.UUID) -> None:
     key_concepts: list[str] = []
     lang = detect_language(content)
     try:
-        raw_summary = await generate_summary(content, content_language=lang)
-        # generate_summary now returns JSON — extract tldr and key_concepts together
+        raw_summary = await generate_summary(content, title=title, content_language=lang)
         try:
             parsed = json.loads(raw_summary)
-            summary = parsed.get("tldr", raw_summary)
-            key_concepts = parsed.get("key_concepts", [])
-            
-            # Restore insights by appending them to the summary markdown
+
+            # Build rich summary string from all new fields
+            overview = parsed.get("overview", "")
+            detailed = parsed.get("detailed_summary", "")
             insights = parsed.get("insights", [])
-            if insights and isinstance(insights, list):
-                summary += "\n\n**Key Insights:**\n"
-                for ins in insights:
-                    summary += f"- {ins}\n"
-                    
+            questions = parsed.get("questions_raised", [])
+            best_quote = parsed.get("best_quote", "")
+
+            summary = overview
+            if detailed:
+                summary += f"\n\n{detailed}"
+            if insights:
+                summary += "\n\n**Insights:**\n" + "\n".join(f"- {i}" for i in insights)
+            if questions:
+                summary += "\n\n**Questions Raised:**\n" + "\n".join(f"- {q}" for q in questions)
+            if best_quote:
+                summary += f'\n\n> "{best_quote}"'
+
+            key_concepts = parsed.get("key_concepts", [])
+
         except (json.JSONDecodeError, ValueError):
-            # Fallback: raw_summary is a plain string (old cache hit or LLM error)
             summary = raw_summary
             key_concepts = []
     except Exception as e:

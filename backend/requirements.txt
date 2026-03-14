@@ -33,3 +33,4 @@ langgraph
 langchain-groq
 langchain-core
 
+beautifulsoup4

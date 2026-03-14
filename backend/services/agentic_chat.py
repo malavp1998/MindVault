@@ -46,13 +46,15 @@ class AgentState(TypedDict):
 
 # ── LLM ───────────────────────────────────────────────────────
 
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
+llm_primary = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, max_retries=0)
+llm_fallback = ChatGroq(model="llama-3.1-8b-instant", temperature=0, max_retries=0)
+llm = llm_primary.with_fallbacks([llm_fallback])
 
 READ_TOOLS  = [search_vault, read_note]
 WRITE_TOOLS = [propose_create_note, propose_update_note, propose_delete_note]
 ALL_TOOLS   = READ_TOOLS + WRITE_TOOLS
 
-llm_with_tools = llm.bind_tools(ALL_TOOLS)
+llm_with_tools = llm_primary.bind_tools(ALL_TOOLS).with_fallbacks([llm_fallback.bind_tools(ALL_TOOLS)])
 
 
 # ── Node 1: Classify intent ───────────────────────────────────
@@ -99,8 +101,10 @@ Return ONLY the JSON object, nothing else.""")
         intent = parsed.get("primary", "READ").upper()
         if intent not in ("READ", "WRITE"):
             intent = "READ"
-    except (json.JSONDecodeError, ValueError):
-        intent = "READ"  # safe fallback
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Intent classification JSON error, falling back to READ: {e}")
+        intent = "READ"
 
     return {**state, "intent": intent}
 
@@ -169,7 +173,11 @@ async def compress_history(state: AgentState) -> AgentState:
 
     # Separate human/AI turns from any leading SystemMessages
     system_msgs = [m for m in messages if isinstance(m, SystemMessage)]
-    conv_msgs   = [m for m in messages if not isinstance(m, SystemMessage)]
+    conv_msgs = [m for m in messages if not isinstance(m, SystemMessage)]
+    
+    # Ensure there's actually messages to compress
+    if not conv_msgs:
+        return {**state, "messages": messages}
 
     # Only compress if there are enough turns to make it worthwhile
     if len(conv_msgs) < 4:

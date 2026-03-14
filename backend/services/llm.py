@@ -89,7 +89,7 @@ async def call_sarvam(prompt: str, model: str) -> str:
 # ── MAIN ROUTER WITH FALLBACK ─────────────────────────
 
 @traceable(name="llm_complete", tags=["llm", "routing"])
-async def llm_complete(prompt: str, lang: str | None = None) -> str:
+async def llm_complete(prompt: str, lang: str | None = None, max_tokens: int = 1000) -> str:
     """Smart routing LLM completion with fallback on rate limits."""
     detected_lang = lang or detect_language(prompt)
 
@@ -167,8 +167,8 @@ async def llm_complete_with_history(messages: list, lang: str | None = None) -> 
 # ── TASK SPECIFIC FUNCTIONS ───────────────────────────
 
 @traceable(name="generate_summary", tags=["pipeline", "summarization"])
-async def generate_summary(content: str, content_language: str | None = None) -> str:
-    """Generate a precise 3-sentence summary relying on smart routing."""
+async def generate_summary(content: str, title: str = "", content_language: str | None = None) -> str:
+    """Antigravity summary — no length limits, no sentence caps, full depth."""
     lang = content_language or detect_language(content)
     cache_query = content[:500]
 
@@ -176,78 +176,113 @@ async def generate_summary(content: str, content_language: str | None = None) ->
     if cached:
         return cached
 
+    title_block = f"<title>{title}</title>\n\n" if title else ""
+
     if is_indic(lang):
-        summary_prompt = f"""<role>Aap ek precise knowledge summarization engine hain.</role>
+        summary_prompt = f"""<role>
+Aap ek world-class knowledge analyst hain jo ek personal second brain ke liye kaam karte hain.
+Aapka kaam hai content ko itne achhe se summarize karna ki user ko kabhi original padhna na pade.
+</role>
 
-<task>Neeche diye content ka structured JSON summary banao.</task>
+<task>
+Neeche diye content ka ek comprehensive, structured JSON summary banao.
+Koi length limit NAHI hai. Jitna content demand kare, utna likho.
+</task>
 
 <schema>
 {{
-  "tldr": "exactly 2-3 sentences, plain prose, same language as content",
-  "key_concepts": ["concept1", "concept2", "concept3"],
-  "insights": ["insight1", "insight2"]
+  "one_liner": "Ek crisp sentence — poora content ek line mein",
+  "overview": "4-6 sentences — kya hai, main argument kya hai, kyun zaroori hai, aur kiske liye relevant hai",
+  "detailed_summary": "Exactly 2 paragraphs. Paragraph 1: kya hai aur main argument. Paragraph 2: sabse important supporting detail ya nuance. Har paragraph 2-3 sentences. Paragraph 2 ke baad hard stop.",
+  "key_concepts": ["concept1", "concept2", "concept3", "concept4", "concept5"],
+  "insights": [
+    "Koi non-obvious ya counterintuitive point jo content mein hai",
+    "Ek concrete takeaway jo reader implement kar sake",
+    "Kuch jo author implicitly kehta hai lekin directly nahi"
+  ],
+  "questions_raised": ["Ek interesting open question jo content uthata hai"],
+  "best_quote": "Content ka sabse powerful sentence — verbatim, ya empty string agar koi nahi"
 }}
 </schema>
 
 <rules>
-- tldr must be self-contained — sirf padhke topic samajh aaye
-- key_concepts: 3-6 short noun phrases, lowercase
-- insights: 1-3 actionable takeaways, empty array if none
-- Return ONLY the JSON object — no markdown fences, no explanation
+- detailed_summary sabse important field hai — itna comprehensive hona chahiye ki reader ko original padhna na pade
+- overview aur detailed_summary alag purposes serve karte hain — ek doosre ko replace mat karo
+- insights sirf is content ke liye specific hone chahiye — generic advice nahi
+- Return ONLY the JSON object — no markdown fences, no preamble, kuch bhi extra nahi
 </rules>
 
-<content>{content[:4000]}</content>
+{title_block}<content>{content[:12000]}</content>
 
 Output:"""
+
     else:
-        summary_prompt = f"""<role>You are a precise knowledge summarization engine for a personal vault.</role>
+        summary_prompt = f"""<role>
+You are a world-class knowledge analyst working for a personal second brain.
+Your mission: summarize content so thoroughly that the user never needs to read the original again.
+You write like the smartest person in the room explaining something to a curious friend — precise, opinionated, genuinely useful.
+</role>
 
-<task>Summarize the content below into a structured JSON object.</task>
+<task>
+Produce a comprehensive, structured JSON summary of the content below.
+There is NO length limit. Write as much as the content demands.
+A short article might need 200 words of detailed_summary. A dense paper might need 800. Match the depth.
+</task>
 
 <schema>
 {{
-  "tldr": "exactly 2-3 sentences, plain prose, no bullet points",
-  "key_concepts": ["concept1", "concept2", "concept3"],
-  "insights": ["insight1", "insight2"]
+  "one_liner": "One razor-sharp sentence that captures the entire content",
+  "overview": "4-6 sentences covering: what this is, the central argument or finding, why it matters, and who it's most relevant for",
+  "detailed_summary": "Exactly 2 paragraphs. Paragraph 1: what this is and the central argument. Paragraph 2: the most important supporting detail or nuance. Each paragraph 2-3 sentences. Hard stop after paragraph 2.",
+  "key_concepts": ["5-8 specific concepts or terms central to understanding this content"],
+  "insights": [
+    "The most non-obvious or counterintuitive point in the content",
+    "One concrete thing the reader can do differently after reading this",
+    "Something the author implies but never explicitly states"
+  ],
+  "questions_raised": ["The most interesting open question or tension this content surfaces"],
+  "best_quote": "The single most memorable sentence from the original verbatim, or empty string if none"
 }}
 </schema>
 
 <rules>
-- tldr must be self-contained — someone should understand the topic from it alone
-- key_concepts: 3-6 single nouns or short phrases, lowercase
-- insights: 1-3 actionable or notable takeaways, can be empty array if none
-- Return ONLY the JSON object — no markdown fences, no preamble
+- detailed_summary is the centrepiece — comprehensive enough that a reader fully understands the content without touching the original
+- overview and detailed_summary serve DIFFERENT purposes — do not copy-paste between them
+- insights must be earned from THIS content — no generic filler like "practice regularly" or "learn more"
+- Return ONLY the JSON object. Nothing before the opening brace. Nothing after the closing brace.
 </rules>
 
-<example>
-Input: "Article about Python asyncio event loop, coroutines, and FastAPI async endpoints"
-Output: {{"tldr": "Python asyncio uses an event loop to run coroutines concurrently without threads. FastAPI is built on this model, making all route handlers async by default. Understanding the event loop is essential for avoiding blocking calls in production.", "key_concepts": ["asyncio", "event loop", "coroutines", "fastapi", "async/await"], "insights": ["Never call blocking I/O inside async functions — use run_in_executor instead", "FastAPI's dependency injection is fully async-compatible"]}}
-</example>
+<example_output>
+{{
+  "one_liner": "Transformers replace sequential recurrence with parallelizable self-attention, making all modern LLMs possible.",
+  "overview": "The 2017 'Attention is All You Need' paper introduced the Transformer architecture, ditching RNNs entirely in favour of self-attention layers. This unlocked full training parallelization — something RNNs could never achieve due to their sequential nature. The result was dramatically faster training and far better long-range dependency handling. It became the direct foundation for GPT, BERT, and virtually every LLM that followed.",
+  "detailed_summary": "Before Transformers, sequence modelling was dominated by RNNs and LSTMs which processed tokens one at a time, creating an unavoidable sequential bottleneck that made GPU parallelization nearly impossible. The Transformer paper proposed throwing away recurrence entirely and replacing it with self-attention — a mechanism that computes relationships between every pair of tokens simultaneously. Each token produces three vectors (query, key, value) and attention scores are computed as scaled dot-products between queries and keys, producing a weighted sum of values that becomes the new token representation. Multi-head attention runs several of these operations in parallel, each learning different relationship types. Positional encodings — fixed sinusoidal vectors added to input embeddings — compensate for the fact that self-attention is inherently order-agnostic. The architecture stacks these attention layers with feed-forward layers, layer normalization, and residual connections. What made this transformative wasn't just accuracy but training efficiency — parallelizing over an entire sequence dropped training times by orders of magnitude, making the scaling laws we rely on today economically viable.",
+  "key_concepts": ["self-attention", "multi-head attention", "positional encoding", "query-key-value", "encoder-decoder", "residual connections"],
+  "insights": [
+    "Positional encoding is a workaround not a solution — Transformers are inherently order-agnostic, which is why they can struggle with strict sequential tasks",
+    "The real revolution wasn't accuracy but parallelizability — it made large-scale training economically feasible for the first time",
+    "The paper quietly made RNNs, LSTMs, and GRUs obsolete but framed it modestly — the architecture's dominance wasn't obvious to everyone at release"
+  ],
+  "questions_raised": ["Does sinusoidal positional encoding fundamentally cap Transformer performance on tasks requiring strict causal ordering?"],
+  "best_quote": "Attention is all you need."
+}}
+</example_output>
 
-<content>{content[:4000]}</content>
+{title_block}<content>{content[:12000]}</content>
 
 Output:"""
 
-    raw = await llm_complete(summary_prompt, lang)
+    raw = await llm_complete(summary_prompt, lang, max_tokens=1200)
 
-    # Parse structured response — extract tldr as the stored summary,
-    # return full parsed object so pipeline.py can pluck key_concepts directly
     try:
         import re
         cleaned = raw.strip()
-        # Find the first { and last } to extract the JSON object
         match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if match:
             cleaned = match.group(0)
-            
         parsed = json.loads(cleaned)
-        tldr = parsed.get("tldr", "").strip()
-        # Stash key_concepts on the parsed object so pipeline.py can use them
-        # without a second LLM call (see Change 4 — pipeline.py)
-        result = json.dumps(parsed)   # store full object in cache
+        result = json.dumps(parsed)
     except (json.JSONDecodeError, ValueError, Exception):
-        # Fallback: treat the raw response as a plain summary string
-        tldr = raw.strip()
         result = raw
 
     await set_cached_response(cache_query, result, cache_key="summary", ttl_hours=settings.cache_ttl_summary_hours)

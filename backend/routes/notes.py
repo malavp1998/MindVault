@@ -63,6 +63,13 @@ async def create_note(
             )
 
     content = body.content
+    
+    # Process HTML content from the web extension using BeautifulSoup
+    if "<p" in content.lower() or "<div" in content.lower() or "<article" in content.lower() or "<span" in content.lower():
+        from services.scraper import extract_text, strip_metadata_lines
+        content = extract_text(content)
+        content = strip_metadata_lines(content)
+
     if body.annotation:
         content = f"[User Annotation]: {body.annotation}\n\n{content}"
 

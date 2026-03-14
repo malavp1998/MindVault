@@ -202,10 +202,9 @@ async function handleSavePage() {
                     const doc = document.cloneNode(true)
                     const reader = new Readability(doc)
                     const article = reader.parse()
-                    // clean up extra whitespace
-                    return (article?.textContent || document.body.innerText).replace(/\n\s*\n/g, '\n\n').trim()
+                    return (article?.content || document.body.innerHTML)
                 }
-                return document.body.innerText.replace(/\n\s*\n/g, '\n\n').trim()
+                return document.body.innerText
             }
         })
         content = results[0]?.result || ""
@@ -215,7 +214,7 @@ async function handleSavePage() {
 
     const result = await sendMessage({
         type: "SAVE_NOTE",
-        content: content.slice(0, 5000),
+        content: content.slice(0, 200000),
         title: currentTab?.title || "Untitled",
         sourceUrl: currentTab?.url || "",
         annotation,

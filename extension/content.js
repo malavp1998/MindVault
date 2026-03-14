@@ -11,14 +11,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const doc = document.cloneNode(true)
         const reader = new Readability(doc)
         const article = reader.parse()
-        content = article?.textContent || document.body.innerText
+        content = article?.content || document.body.innerHTML
       } else {
         content = document.body.innerText
       }
     } catch (e) {
       content = document.body.innerText || ""
     }
-    sendResponse({ content: content.slice(0, 5000) })
+    sendResponse({ content: content.slice(0, 200000) })
   }
 
   if (message.type === "GET_YOUTUBE_TRANSCRIPT") {

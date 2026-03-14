@@ -109,9 +109,17 @@ async def agentic_chat(
         )
     except Exception as e:
         import logging
-        logging.getLogger(__name__).error(f"Agentic Chat Error: {e}")
+        error_msg = str(e)
+        logging.getLogger(__name__).error(f"Agentic Chat Error: {error_msg}")
+        
+        # Surface rate limits friendly to the user
+        if "429" in error_msg or "rate limit" in error_msg.lower() or "quota" in error_msg.lower():
+            user_msg = "You have reached your daily LLM request quota. Please wait for the limit to reset or upgrade."
+        else:
+            user_msg = "I'm sorry, an internal error occurred while processing your request."
+            
         return ChatResponse(
-            response="I'm sorry, an internal error occurred while processing your request.",
+            response=user_msg,
             type="answer",
             session_id=str(session_id)
         )
