@@ -28,19 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-
-class TrustHostMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        request.scope["headers"] = [
-            (k, v) for k, v in request.scope["headers"]
-            if k.lower() != b"host"
-        ] + [(b"host", b"mindvault-wspy.onrender.com")]
-        return await call_next(request)
-
 mcp_app = mcp.streamable_http_app()
-mcp_app.add_middleware(TrustHostMiddleware)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

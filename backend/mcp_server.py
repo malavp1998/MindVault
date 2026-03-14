@@ -15,7 +15,12 @@ from services.revision_selector import get_revision_queue
 from sqlalchemy import select, text
 
 # Create the MCP server
-mcp = FastMCP("MindVault", stateless_http=True)
+mcp = FastMCP(
+    "MindVault",
+    stateless_http=True,
+    host="0.0.0.0",
+    allowed_hosts=["mindvault-wspy.onrender.com", "localhost", "localhost:8000"],
+)
 
 
 @mcp.tool()
