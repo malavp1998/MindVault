@@ -4,6 +4,7 @@ import { getNote, updateNote, processNote, deleteNote, api } from '../api';
 import ReactMarkdown from 'react-markdown';
 import RichTextEditor from '../components/RichTextEditor';
 import ChatPanel from '../components/ChatPanel';
+import SearchPanel from '../components/SearchPanel';
 
 export default function NotePage() {
     const { id } = useParams();
@@ -26,7 +27,7 @@ export default function NotePage() {
 
     // UI state
     const [showContent, setShowContent] = useState(false);
-    const [showChat, setShowChat] = useState(true);
+    const [sidebarTab, setSidebarTab] = useState('chat');
 
     const navigate = useNavigate();
 
@@ -192,31 +193,15 @@ export default function NotePage() {
             <div className="note-detail" style={{ flex: 1, minWidth: 0 }}>
             {/* Header */}
             <div className="note-detail-header">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <button
-                        onClick={() => navigate(-1)}
-                        style={{
-                            background: 'none', border: 'none', color: 'var(--accent-light)',
-                            fontSize: 14, cursor: 'pointer', marginBottom: 16, display: 'block',
-                        }}
-                    >
-                        ← Back
-                    </button>
-                    <button
-                        onClick={() => setShowChat(!showChat)}
-                        style={{
-                            background: showChat ? 'rgba(124, 58, 237, 0.15)' : 'var(--bg-card-hover)',
-                            border: showChat ? '1px solid rgba(124, 58, 237, 0.4)' : '1px solid var(--border)',
-                            color: showChat ? '#a78bfa' : 'var(--text-secondary)',
-                            padding: '4px 12px', borderRadius: 6,
-                            fontSize: 12, cursor: 'pointer',
-                            transition: 'all 0.15s',
-                            marginBottom: 16,
-                        }}
-                    >
-                        {showChat ? '🧠 Hide Chat' : '🧠 Chat'}
-                    </button>
-                </div>
+                <button
+                    onClick={() => navigate(-1)}
+                    style={{
+                        background: 'none', border: 'none', color: 'var(--accent-light)',
+                        fontSize: 14, cursor: 'pointer', marginBottom: 16, display: 'block',
+                    }}
+                >
+                    ← Back
+                </button>
 
                 {isEditing ? (
                     <input
@@ -467,19 +452,65 @@ export default function NotePage() {
             }
         </div>
 
-            {/* Right: Chat Panel */}
-            {showChat && (
+            {/* Right: Sidebar with Tabs */}
+            <div style={{
+                width: '380px',
+                minWidth: '380px',
+                position: 'sticky',
+                top: '80px',
+                marginLeft: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                height: 'calc(100vh - 100px)',
+            }}>
+                {/* Pill Tab Buttons */}
                 <div style={{
-                    width: '380px',
-                    minWidth: '380px',
-                    height: 'calc(100vh - 100px)',
-                    position: 'sticky',
-                    top: '80px',
-                    marginLeft: '16px',
+                    display: 'flex',
+                    gap: '4px',
+                    marginBottom: '10px',
+                    background: 'var(--bg-card-hover)',
+                    borderRadius: '10px',
+                    padding: '3px',
                 }}>
-                    <ChatPanel noteContext={{ id: note.id, title: note.title }} />
+                    {[{key: 'chat', icon: '🧠', label: 'Chat'}, {key: 'search', icon: '🔍', label: 'Search'}].map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setSidebarTab(tab.key)}
+                            style={{
+                                flex: 1,
+                                padding: '7px 0',
+                                borderRadius: '8px',
+                                border: 'none',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                background: sidebarTab === tab.key
+                                    ? 'linear-gradient(135deg, #7c3aed, #6d28d9)'
+                                    : 'transparent',
+                                color: sidebarTab === tab.key
+                                    ? '#fff'
+                                    : 'var(--text-muted)',
+                                boxShadow: sidebarTab === tab.key
+                                    ? '0 2px 8px rgba(124,58,237,0.3)'
+                                    : 'none',
+                            }}
+                        >
+                            {tab.icon} {tab.label}
+                        </button>
+                    ))}
                 </div>
-            )}
+
+                {/* Tab Content */}
+                <div style={{ flex: 1, minHeight: 0 }}>
+                    {sidebarTab === 'chat' && (
+                        <ChatPanel noteContext={{ id: note.id, title: note.title }} />
+                    )}
+                    {sidebarTab === 'search' && (
+                        <SearchPanel />
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
