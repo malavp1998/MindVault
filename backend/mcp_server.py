@@ -19,16 +19,22 @@ mcp = FastMCP("MindVault", stateless_http=True)
 
 
 @mcp.tool()
-async def search_vault(query: str, top_k: int = 5) -> str:
+async def search_vault(query: str, user_id: str, top_k: int = 5) -> str:
     """Search the vault for semantically similar notes.
 
     Args:
         query: The search query text.
+        user_id: The UUID of the user. MUST provide this to scope the search.
         top_k: Number of results to return (default 5).
 
     Returns:
         A formatted string of matching notes with titles, summaries, and similarity scores.
     """
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+
     query_embedding = await get_embedding(query)
 
     async with async_session() as db:
@@ -38,10 +44,11 @@ async def search_vault(query: str, top_k: int = 5) -> str:
                        1 - (embedding <=> CAST(:emb AS vector)) as similarity
                 FROM notes
                 WHERE embedding IS NOT NULL
+                  AND user_id = CAST(:uid AS uuid)
                 ORDER BY embedding <=> CAST(:emb AS vector)
                 LIMIT :top_k
             """),
-            {"emb": str(query_embedding), "top_k": top_k},
+            {"emb": str(query_embedding), "top_k": top_k, "uid": str(uid)},
         )
         rows = result.all()
 
@@ -63,23 +70,30 @@ async def search_vault(query: str, top_k: int = 5) -> str:
 
 
 @mcp.tool()
-async def add_note(content: str, title: str = "Untitled", source: str = "") -> str:
+async def add_note(content: str, user_id: str, title: str = "Untitled", source: str = "") -> str:
     """Save a new note to the vault and trigger AI processing.
 
     Args:
         content: The note content text.
+        user_id: The UUID of the user. MUST provide this to assign ownership.
         title: Title for the note (default "Untitled").
         source: Source URL if applicable.
 
     Returns:
         Confirmation message with the new note's ID.
     """
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+
     async with async_session() as db:
         note = Note(
             title=title,
             content=content,
             source_url=source or None,
             tags=[],
+            user_id=uid,
         )
         db.add(note)
         await db.commit()
@@ -95,11 +109,12 @@ async def add_note(content: str, title: str = "Untitled", source: str = "") -> s
 
 
 @mcp.tool()
-async def get_related(note_id: str) -> str:
+async def get_related(note_id: str, user_id: str) -> str:
     """Get notes that are linked to a specific note.
 
     Args:
         note_id: UUID of the note to find related notes for.
+        user_id: The UUID of the user. MUST provide this to verify ownership.
 
     Returns:
         A formatted string of related notes with similarity scores.
@@ -109,16 +124,22 @@ async def get_related(note_id: str) -> str:
     except ValueError:
         return "Invalid note ID format. Please provide a valid UUID."
 
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+
     async with async_session() as db:
         note = await db.get(Note, nid)
-        if not note:
-            return f"Note {note_id} not found."
+        if not note or note.user_id != uid:
+            return f"Note {note_id} not found in your vault."
 
-        # Get outgoing links
+        # Get outgoing links — only to notes owned by the same user
         result = await db.execute(
             select(NoteLink, Note)
             .join(Note, NoteLink.target_id == Note.id)
             .where(NoteLink.source_id == nid)
+            .where(Note.user_id == uid)
             .order_by(NoteLink.similarity_score.desc())
         )
         links = result.all()
@@ -137,15 +158,25 @@ async def get_related(note_id: str) -> str:
 
 
 @mcp.tool()
-async def list_topics() -> str:
+async def list_topics(user_id: str) -> str:
     """List all auto-generated topic clusters with note counts.
+
+    Args:
+        user_id: The UUID of the user. MUST provide this to scope to their topics.
 
     Returns:
         A formatted string of topics with their names and note counts.
     """
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+
     async with async_session() as db:
         result = await db.execute(
-            select(Topic).order_by(Topic.note_count.desc())
+            select(Topic)
+            .where(Topic.user_id == uid)
+            .order_by(Topic.note_count.desc())
         )
         topics = result.scalars().all()
 
@@ -161,11 +192,12 @@ async def list_topics() -> str:
 
 
 @mcp.tool()
-async def summarize_topic(topic_id: str) -> str:
+async def summarize_topic(topic_id: str, user_id: str) -> str:
     """Generate an AI summary for a specific topic cluster.
 
     Args:
         topic_id: UUID of the topic to summarize.
+        user_id: The UUID of the user. MUST provide this to verify ownership.
 
     Returns:
         A synthesized summary of the topic based on its notes.
@@ -175,13 +207,18 @@ async def summarize_topic(topic_id: str) -> str:
     except ValueError:
         return "Invalid topic ID format. Please provide a valid UUID."
 
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        return "Invalid user ID format. Please provide a valid UUID."
+
     async with async_session() as db:
         topic = await db.get(Topic, tid)
-        if not topic:
-            return f"Topic {topic_id} not found."
+        if not topic or topic.user_id != uid:
+            return f"Topic {topic_id} not found in your vault."
 
         result = await db.execute(
-            select(Note).where(Note.topic_id == tid).limit(10)
+            select(Note).where(Note.topic_id == tid, Note.user_id == uid).limit(10)
         )
         notes = result.scalars().all()
 

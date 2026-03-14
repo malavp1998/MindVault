@@ -347,3 +347,92 @@ class PendingAgentAction(Base):
     preview_message = Column(String, nullable=False) # human-readable "I want to update your note X..."
     expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(minutes=5))
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# ─── Retrieval Evaluation Models ───────────────────────────────
+
+class EvalQuery(Base):
+    """Golden dataset — hand-curated query + expected note pairs."""
+    __tablename__ = "eval_queries"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False
+    )
+    expected_note_title: Mapped[str] = mapped_column(String(500), nullable=False)
+    query_type: Mapped[str] = mapped_column(String(50), default="question")  # keyword|question|vague|indic
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class EvalRun(Base):
+    """One execution of the offline eval runner — stores aggregate scores."""
+    __tablename__ = "eval_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    total_queries: Mapped[int] = mapped_column(Integer, nullable=False)
+    precision_at_3: Mapped[float] = mapped_column(Float, nullable=False)   # % of queries where expected note in top-3
+    avg_similarity: Mapped[float] = mapped_column(Float, nullable=False)   # mean similarity across all results
+    zero_result_rate: Mapped[float] = mapped_column(Float, nullable=False) # % of queries that returned 0 results
+    gate_passed: Mapped[bool] = mapped_column(Boolean, nullable=False)     # True = passed regression gate
+    gate_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # reason if failed
+    raw_results: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True) # per-query detail
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class RetrievalLog(Base):
+    """Live log — one row per /search call, always-on."""
+    __tablename__ = "retrieval_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    notes_returned: Mapped[int] = mapped_column(Integer, nullable=False)
+    avg_similarity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    top_similarity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    min_similarity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rag_confidence: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # high|medium|low
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class ResultVote(Base):
+    """Human review — thumbs up/down on individual search results."""
+    __tablename__ = "result_votes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    note_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notes.id", ondelete="CASCADE"), nullable=False
+    )
+    vote: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 = thumbs up, -1 = thumbs down
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'query_text', 'note_id', name='uq_user_query_note_vote'),
+    )

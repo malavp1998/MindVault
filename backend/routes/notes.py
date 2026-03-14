@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from models import Note, NoteLink, Topic, User, NoteMemoryState
+from models import Note, NoteLink, Topic, User, NoteMemoryState, RetrievalLog
 from schemas import (
     NoteCreate, NoteOut, NoteListOut, NoteLinkOut,
     SearchResult, SearchResponse, RAGResponse,
@@ -366,31 +366,85 @@ async def search_notes(
         run.metadata["query"] = q
         run.metadata["rag_enabled"] = synthesize
 
-    # Generate query embedding
+    # ── Hybrid Search: Vector + BM25 + RRF Fusion ──────────────
+
+    # Run both searches concurrently
+    fetch_k = top_k * 3  # fetch more candidates before fusion
+
     query_embedding = await get_embedding(q)
 
-    # Search via pgvector — scoped to current user
-    result = await db.execute(
+    vector_task = db.execute(
         text("""
-            SELECT id, title, summary, tags, auto_tags, user_tags, topic_id, source_url, language, is_processed, processed, created_at,
+            SELECT id, title, summary, tags, auto_tags, user_tags,
+                   topic_id, source_url, language, is_processed, processed, created_at,
                    1 - (embedding <=> CAST(:emb AS vector)) as similarity
             FROM notes
             WHERE embedding IS NOT NULL
               AND user_id = CAST(:uid AS uuid)
               AND 1 - (embedding <=> CAST(:emb AS vector)) >= :threshold
             ORDER BY embedding <=> CAST(:emb AS vector)
-            LIMIT :top_k
+            LIMIT :fetch_k
         """),
-        {"emb": str(query_embedding), "top_k": top_k, "uid": str(current_user.id), "threshold": settings.search_similarity_threshold},
+        {
+            "emb": str(query_embedding),
+            "fetch_k": fetch_k,
+            "uid": str(current_user.id),
+            "threshold": settings.search_similarity_threshold,
+        },
     )
-    rows = result.all()
+
+    bm25_task = db.execute(
+        text("""
+            SELECT id, title, summary, tags, auto_tags, user_tags,
+                   topic_id, source_url, language, is_processed, processed, created_at,
+                   ts_rank(fts, plainto_tsquery('english', :q)) as bm25_score
+            FROM notes
+            WHERE fts IS NOT NULL
+              AND user_id = CAST(:uid AS uuid)
+              AND fts @@ plainto_tsquery('english', :q)
+            ORDER BY bm25_score DESC
+            LIMIT :fetch_k
+        """),
+        {
+            "q": q,
+            "fetch_k": fetch_k,
+            "uid": str(current_user.id),
+        },
+    )
+
+    vector_result, bm25_result = await asyncio.gather(vector_task, bm25_task)
+    vector_rows = vector_result.all()
+    bm25_rows = bm25_result.all()
+
+    # ── RRF Fusion ──────────────────────────────────────────────
+    # score(note) = 1/(60 + vector_rank) + 1/(60 + bm25_rank)
+    # Notes in both lists score highest. Neither list dominates.
+
+    RRF_K = 60
+    rrf_scores: dict[str, float] = {}
+    note_data: dict[str, tuple] = {}
+
+    for rank, row in enumerate(vector_rows):
+        note_id = str(row[0])
+        rrf_scores[note_id] = rrf_scores.get(note_id, 0) + 1 / (RRF_K + rank + 1)
+        note_data[note_id] = row  # store full row keyed by id
+
+    for rank, row in enumerate(bm25_rows):
+        note_id = str(row[0])
+        rrf_scores[note_id] = rrf_scores.get(note_id, 0) + 1 / (RRF_K + rank + 1)
+        if note_id not in note_data:
+            note_data[note_id] = row  # add BM25-only notes not in vector results
+
+    # Sort by combined RRF score, take top_k
+    ranked_ids = sorted(rrf_scores, key=lambda x: rrf_scores[x], reverse=True)[:top_k]
 
     search_results = []
     contexts = []
-    for row in rows:
-        note_id, title, summary, tags, auto_tags, user_tags, topic_id, source_url, lang, is_processed, processed, created_at, similarity = row
 
-        # Get topic name
+    for note_id in ranked_ids:
+        row = note_data[note_id]
+        _, title, summary, tags, auto_tags, user_tags, topic_id, source_url, lang, is_processed, processed, created_at, _ = row
+
         topic_name = None
         if topic_id:
             topic = await db.get(Topic, topic_id)
@@ -399,7 +453,7 @@ async def search_notes(
 
         search_results.append(SearchResult(
             note=NoteListOut(
-                id=note_id,
+                id=uuid.UUID(note_id),
                 title=title,
                 summary=summary,
                 tags=tags or [],
@@ -413,13 +467,30 @@ async def search_notes(
                 processed=processed,
                 created_at=created_at,
             ),
-            similarity=round(float(similarity), 4),
+            similarity=round(rrf_scores[note_id], 4),  # RRF score used as similarity
         ))
 
         if summary:
             contexts.append(f"Title: {title}\n{summary}")
         elif title:
             contexts.append(f"Title: {title}")
+
+    # ── Live retrieval logging ──────────────────────────────────
+    try:
+        scores = [r.similarity for r in search_results]
+        log = RetrievalLog(
+            user_id=current_user.id,
+            query_text=q,
+            notes_returned=len(scores),
+            avg_similarity=round(sum(scores) / len(scores), 4) if scores else None,
+            top_similarity=round(max(scores), 4) if scores else None,
+            min_similarity=round(min(scores), 4) if scores else None,
+        )
+        db.add(log)
+        await db.flush()
+    except Exception:
+        pass  # logging must never break search
+    # ───────────────────────────────────────────────────────────
 
     # RAG synthesis via LangGraph Agent if requested
     rag = None

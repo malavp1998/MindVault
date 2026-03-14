@@ -101,6 +101,9 @@ app.include_router(revision_router, prefix="/api")
 from routes.agentic_chat import router as agentic_chat_router
 app.include_router(agentic_chat_router)
 
+from routes.eval import router as eval_router
+app.include_router(eval_router)
+
 # MCP server direct route injection instead of mount to avoid /mcp/mcp duplication
 app.routes.extend(mcp_app.routes)
 

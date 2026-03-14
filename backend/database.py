@@ -48,6 +48,21 @@ async def init_db():
         # Add graph coordinate columns if they don't exist (for existing DBs)
         await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_x FLOAT"))
         await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_y FLOAT"))
+        # Full-text search index for hybrid search (BM25)
+        await conn.execute(text("""
+            ALTER TABLE notes
+            ADD COLUMN IF NOT EXISTS fts tsvector
+            GENERATED ALWAYS AS (
+                to_tsvector('english',
+                    coalesce(title, '') || ' ' ||
+                    coalesce(content, '') || ' ' ||
+                    coalesce(summary, '')
+                )
+            ) STORED
+        """))
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS notes_fts_idx ON notes USING GIN(fts)
+        """))
         # firebase_uid migration for existing users table
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid VARCHAR(128)"))
         await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_firebase_uid ON users(firebase_uid)"))
