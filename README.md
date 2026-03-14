@@ -20,31 +20,37 @@
 
 ![Dashboard](screenshots/dashboard.png)
 
-*Dark-themed masonry grid showing all saved notes with AI-generated summaries, auto tags, topic badges, and language detection.*
+*Dark-themed masonry grid showing 50 saved notes with AI-generated summaries, auto tags, topic badges, memory retention scores, and language detection.*
 
-### Note Detail — AI Summary, Key Concepts & Backlinks
+### Note Detail — AI Summary, Tags & Actions
 
 ![Note Detail](screenshots/note_detail.png)
 
-*Full note view with AI-generated TL;DR summary, key concepts extraction, auto/custom tags, original content, and linked notes with similarity scores.*
+*Full note view with AI-generated summary, auto-tagged key concepts, custom tags, Reprocess/Edit/Delete actions, and source link.*
 
-### Semantic Search + RAG Answer
+### Semantic Search + Hybrid Retrieval
 
-![Search RAG](screenshots/search_rag.png)
+![Search](screenshots/search_rag.png)
 
-*Natural language search powered by pgvector. Returns an AI-synthesized answer grounded in YOUR notes, with cited source cards and similarity percentages.*
+*Natural language search powered by hybrid Vector + BM25 + RRF fusion. Returns semantically matched notes with similarity scores and optional RAG synthesis.*
 
 ### Knowledge Graph — Obsidian-Style Topic Visualization
 
 ![Topics Graph](screenshots/topics_graph.png)
 
-*Interactive force-directed graph. Large purple nodes = topic clusters, small gray nodes = individual notes. Hover to highlight connections, click to explore.*
+*Interactive force-directed graph. Topic clusters with semantic similarity edges, configurable threshold slider, and graph depth controls.*
+
+### Daily Revision — Spaced Repetition
+
+![Revision](screenshots/revision.png)
+
+*Spaced repetition review queue. "Reveal Summary" flashcard-style interface with progress tracking and memory retention scoring.*
 
 ### API Documentation — Swagger UI
 
 ![API Docs](screenshots/api_docs.png)
 
-*Auto-generated interactive API docs via FastAPI. All 15+ endpoints for notes, topics, graph, and health checks.*
+*Auto-generated interactive API docs via FastAPI. All endpoints for auth, notes, topics, graph, chat, eval, and health checks.*
 
 ---
 
@@ -560,15 +566,15 @@ Returns full node and link data for the Obsidian-style graph view.
 
 ## 🤖 MCP Tools
 
-| Tool                          | Description                          |
-|-------------------------------|--------------------------------------|
-| `search_vault(query)`         | Semantic search across all notes     |
-| `add_note(content, title, source)` | Save and process a new note     |
-| `get_related(note_id)`        | Get linked notes                     |
-| `list_topics()`               | List all topic clusters              |
-| `summarize_topic(topic_id)`   | Generate topic summary               |
-| `chat_with_vault(message)`    | Native Q&A via LangGraph RAG agent |
-| `get_due_reviews()`           | Fetch daily spaced-repetition queue  |
+| Tool                                          | Description                          |
+|-----------------------------------------------|--------------------------------------|
+| `search_vault(query, user_id)`                | Semantic search across user's notes  |
+| `add_note(content, user_id, title, source)`   | Save and process a new note          |
+| `get_related(note_id, user_id)`               | Get linked notes                     |
+| `list_topics(user_id)`                        | List user's topic clusters           |
+| `summarize_topic(topic_id, user_id)`          | Generate topic summary               |
+| `chat_with_vault(message, user_id)`           | Native Q&A via LangGraph RAG agent   |
+| `get_due_reviews(user_id)`                    | Fetch daily spaced-repetition queue  |
 
 ### Example Claude Desktop Interactions
 
