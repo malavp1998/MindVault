@@ -60,31 +60,57 @@ async def process_note(note_id: uuid.UUID, bypass_cache: bool = False) -> None:
     lang = detect_language(content)
     try:
         raw_summary = await generate_summary(content, title=title, content_language=lang, bypass_cache=bypass_cache)
+        
+        # Helper to gently extract fields when json.loads fails (e.g. due to unescaped quotes)
+        def _extract_string(field, text):
+            import re
+            match = re.search(rf'"{field}"\s*:\s*"(.*?)"\s*(?:,\s*"|$|\}})', text, re.DOTALL)
+            if match:
+                val = match.group(1).replace('\\"', '"').replace('\\n', '\n')
+                if val.endswith('"'): val = val[:-1]
+                return val.strip()
+            return ""
+
+        def _extract_list(field, text):
+            import re
+            match = re.search(rf'"{field}"\s*:\s*\[(.*?)\]', text, re.DOTALL)
+            if match:
+                inner = match.group(1)
+                return [m.replace('\\"', '"') for m in re.findall(r'"(.*?)"', inner)]
+            return []
+
         try:
             parsed = json.loads(raw_summary)
-
-            # Build rich summary string from all new fields
             overview = parsed.get("overview", "")
             detailed = parsed.get("detailed_summary", "")
             insights = parsed.get("insights", [])
             questions = parsed.get("questions_raised", [])
             best_quote = parsed.get("best_quote", "")
-
-            summary = overview
-            if detailed:
-                summary += f"\n\n{detailed}"
-            if insights:
-                summary += "\n\n**Insights:**\n" + "\n".join(f"- {i}" for i in insights)
-            if questions:
-                summary += "\n\n**Questions Raised:**\n" + "\n".join(f"- {q}" for q in questions)
-            if best_quote:
-                summary += f'\n\n> "{best_quote}"'
-
             key_concepts = parsed.get("key_concepts", [])
-
         except (json.JSONDecodeError, ValueError):
-            summary = raw_summary
-            key_concepts = []
+            overview = _extract_string("overview", raw_summary)
+            detailed = _extract_string("detailed_summary", raw_summary)
+            insights = _extract_list("insights", raw_summary)
+            questions = _extract_list("questions_raised", raw_summary)
+            best_quote = _extract_string("best_quote", raw_summary)
+            key_concepts = _extract_list("key_concepts", raw_summary)
+            
+            # If everything failed, just dump the raw text so we don't lose the data,
+            # but usually regex will save the day.
+            if not overview and not detailed:
+                overview = raw_summary
+
+        # Build rich summary string from all fields
+        summary = overview
+        if detailed:
+            summary += f"\n\n{detailed}"
+        if insights:
+            summary += "\n\n**Insights:**\n" + "\n".join(f"- {i}" for i in insights)
+        if questions:
+            summary += "\n\n**Questions Raised:**\n" + "\n".join(f"- {q}" for q in questions)
+        if best_quote:
+            summary += f'\n\n> "{best_quote}"'
+
     except Exception as e:
         logger.warning(f"Summary generation failed: {e}")
 

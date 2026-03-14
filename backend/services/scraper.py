@@ -28,11 +28,25 @@ def extract_text(html: str) -> str:
             tag.insert(0, "\n```\n")
             tag.append("\n```\n")
 
-    # Extract text and clean up excessive newlines
-    text = soup.get_text(separator='\n\n', strip=True)
-    result = re.sub(r'\n{3,}', '\n\n', text)
+    # Ensure block elements have breathing room without breaking inline elements
+    block_elements = ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "blockquote", "pre", "table", "tr", "section", "article"]
+    for tag in soup.find_all(block_elements):
+        tag.insert_before("\n\n")
+        tag.insert_after("\n\n")
+        
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
 
-    return result.strip()
+    # Extract text natively (preserves spacing of inline elements)
+    text = soup.get_text()
+    
+    # Clean up excessive spaces
+    text = re.sub(r' {2,}', ' ', text)
+    
+    # Clean up excessive newlines (accounting for spaces on blank lines)
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+
+    return text.strip()
 
 
 JUNK_PATTERNS = [
