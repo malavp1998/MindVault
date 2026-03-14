@@ -60,34 +60,33 @@ There were only 2 queries out of 50 that failed to retrieve their expected notes
 ## Key Takeaways
 
 1. **Vector search is highly effective** — Achieving 96% Precision@3 on a robust 50-query dataset proves the current embedding model and pgvector integration are performing remarkably well.
-2. **Quality content correlates with searchability** — The system reliably retrieves the correct notes when the notes themselves have rich, meaningful content (like the system design and tech articles).
-
----
-
+    
 ## Live Stats (2026-03-14)
 
 ### Daily Search Activity
 
-| Day | Searches | Avg RRF Score | Zero-Result Rate |
+| Day | Searches | Avg Similarity | Zero-Result Rate |
 |---|---|---|---|
-| 2026-03-14 | 12 | 0.0191 | 17% |
+| 2026-03-14 | 13 | 0.175 | 15.38% |
 
 ### Low Confidence Queries (last 7 days)
 
-| Query | Results | Issue |
+| Query | Results | Issue / Avg Sim |
 |---|---|---|
-| alcohol bad effects | 0 | No matching notes in vault |
-| how does attention work | 0 | No matching notes in vault |
-| grpc | 1 | Single weak match |
-| b trees by anthropic | 1 | Single weak match |
-| stripe | 2 | Few matches |
-| linus | 2 | Few matches |
-| dilesh lost iphone | 4 | No relevant note exists |
-| system design airbnb | 8 | Results returned but low RRF |
+| building multi-agent systems with Claude | 6 | 0.0185 |
+| system design airbnb | 8 | 0.0176 |
+| dilesh lost iphone | 4 | 0.0201 |
+| b trees by anthropic | 1 | 0.0164 |
+| grpc | 1 | 0.0164 |
+| stripe | 2 | 0.0244 |
+| linus | 2 | 0.0163 |
+| alcohol bad effects | 0 | No matching notes |
+| how does attention work | 0 | No matching notes |
 
 ### Votes
 
-No votes recorded yet.
+| Thumbs Up | Thumbs Down |
+|---|---|
+| 0 | 0 |
 
-> [!NOTE]
-> The `similarity` field in `retrieval_logs` now stores RRF fusion scores (0.01–0.03 range) instead of cosine similarity (0.5–0.8). The low-confidence threshold in `/api/eval/stats` should be adjusted to reflect this new scale.
+
