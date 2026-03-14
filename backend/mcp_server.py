@@ -6,19 +6,9 @@ from mcp.server.fastmcp import FastMCP
 
 # Disable host header validation for Render deployment
 try:
-    import mcp.server.streamable_http as _sh
-    if hasattr(_sh, 'StreamableHTTPServerTransport'):
-        _orig_init = _sh.StreamableHTTPServerTransport.__init__
-        def _patched_init(self, *args, **kwargs):
-            _orig_init(self, *args, **kwargs)
-            self._is_valid_host = lambda host: True
-        _sh.StreamableHTTPServerTransport.__init__ = _patched_init
-except Exception:
-    pass
-
-try:
-    from mcp.server import transport_security as _ts
-    _ts.is_valid_host = lambda host, allowed_hosts: True
+    from mcp.server.transport_security import TransportSecurityMiddleware
+    TransportSecurityMiddleware._validate_host = lambda self, host: True
+    TransportSecurityMiddleware._validate_origin = lambda self, origin: True
 except Exception:
     pass
 
