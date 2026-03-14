@@ -112,18 +112,26 @@ async def initialize_memory_state(db: AsyncSession, note_id: uuid.UUID, user_id:
     await db.commit()
 
 
+import logging
+logger = logging.getLogger(__name__)
+
 async def update_retention_scores():
     from database import async_session
-    async with async_session() as db:
-        await db.execute(text("""
-            UPDATE note_memory_state
-            SET
-                estimated_retention = LEAST(1.0, GREATEST(0.0,
-                    EXP(
-                        -(EXTRACT(EPOCH FROM (NOW() - COALESCE(last_reviewed_at, created_at))) / 86400.0)
-                        / GREATEST(stability, 1.0)
-                    )
-                )),
-                updated_at = NOW()
-        """))
-        await db.commit()
+    try:
+        logger.info("🔄 Starting update_retention_scores CRON job...")
+        async with async_session() as db:
+            result = await db.execute(text("""
+                UPDATE note_memory_state
+                SET
+                    estimated_retention = LEAST(1.0, GREATEST(0.0,
+                        EXP(
+                            -(EXTRACT(EPOCH FROM (NOW() - COALESCE(last_reviewed_at, created_at))) / 86400.0)
+                            / GREATEST(stability, 1.0)
+                        )
+                    )),
+                    updated_at = NOW()
+            """))
+            await db.commit()
+            logger.info(f"✅ update_retention_scores complete. Updated {result.rowcount} records.")
+    except Exception as e:
+        logger.error(f"❌ Failed to update retention scores: {e}")

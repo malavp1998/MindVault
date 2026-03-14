@@ -282,3 +282,12 @@ async def get_stats(
         "notes_mastered": stats["notes_mastered"] if stats else 0,
         "notes_due_today": notes_due_today,
     }
+
+@router.post("/debug/force-retention-update")
+async def force_retention_update(current_user: User = CurrentUser):
+    try:
+        from services.revision_selector import update_retention_scores
+        await update_retention_scores()
+        return {"status": "success", "message": "Triggered retention score update"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
