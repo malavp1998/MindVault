@@ -18,6 +18,7 @@ from schemas import (
     YoutubeSummarizeRequest, TagUpdate, SuggestTagsResponse, NoteUpdate
 )
 from services.embedding import get_embedding
+from services.revision_selector import initialize_memory_state, refresh_user_retention
 from services.llm import summarize_youtube_video
 from services.agent import rag_agent
 from services.language import detect_language
@@ -289,6 +290,9 @@ async def list_notes(
     db: AsyncSession = Depends(get_db),
 ):
     """List all notes with optional filters — scoped to current user."""
+    # Recalculate retention scores inline (replaces APScheduler cron on serverless)
+    await refresh_user_retention(db, current_user.id)
+
     backlink_subquery = (
         select(func.count(NoteLink.id))
         .where(NoteLink.target_id == Note.id)

@@ -11,6 +11,9 @@ REVISION_THRESHOLD = getattr(settings, "REVISION_THRESHOLD", 5)
 async def get_revision_queue(db: AsyncSession, user_id: uuid.UUID) -> list:
     now = datetime.utcnow()
 
+    # Recalculate retention scores inline before building queue
+    await refresh_user_retention(db, user_id)
+
     result = await db.execute(text("""
         SELECT
             n.id, n.title, n.summary, n.auto_tags, n.user_tags,
@@ -109,6 +112,27 @@ async def initialize_memory_state(db: AsyncSession, note_id: uuid.UUID, user_id:
         VALUES (gen_random_uuid(), :nid, :uid, 1.0, 1.0, NOW(), 1, 0, NOW(), NOW(), 0.5)
         ON CONFLICT ON CONSTRAINT uq_note_user DO NOTHING
     """), {"nid": str(note_id), "uid": str(user_id)})
+    await db.commit()
+
+
+async def refresh_user_retention(db: AsyncSession, user_id: uuid.UUID):
+    """Recalculate retention scores inline for a single user.
+    
+    This replaces the unreliable APScheduler cron on serverless platforms
+    like Vercel/Render where the process can be killed between requests.
+    """
+    await db.execute(text("""
+        UPDATE note_memory_state
+        SET
+            estimated_retention = LEAST(1.0, GREATEST(0.0,
+                EXP(
+                    -(EXTRACT(EPOCH FROM (NOW() - COALESCE(last_reviewed_at, created_at))) / 86400.0)
+                    / GREATEST(stability, 1.0)
+                )
+            )),
+            updated_at = NOW()
+        WHERE user_id = :uid
+    """), {"uid": str(user_id)})
     await db.commit()
 
 
