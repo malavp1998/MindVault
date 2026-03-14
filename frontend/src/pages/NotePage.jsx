@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getNote, updateNote, processNote, deleteNote, api } from '../api';
 import ReactMarkdown from 'react-markdown';
 import RichTextEditor from '../components/RichTextEditor';
+import ChatPanel from '../components/ChatPanel';
 
 export default function NotePage() {
     const { id } = useParams();
@@ -25,6 +26,7 @@ export default function NotePage() {
 
     // UI state
     const [showContent, setShowContent] = useState(false);
+    const [showChat, setShowChat] = useState(true);
 
     const navigate = useNavigate();
 
@@ -185,18 +187,36 @@ export default function NotePage() {
     }
 
     return (
-        <div className="note-detail">
+        <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start', minHeight: 'calc(100vh - 100px)' }}>
+            {/* Left: Note detail */}
+            <div className="note-detail" style={{ flex: 1, minWidth: 0 }}>
             {/* Header */}
             <div className="note-detail-header">
-                <button
-                    onClick={() => navigate(-1)}
-                    style={{
-                        background: 'none', border: 'none', color: 'var(--accent-light)',
-                        fontSize: 14, cursor: 'pointer', marginBottom: 16, display: 'block',
-                    }}
-                >
-                    ← Back
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button
+                        onClick={() => navigate(-1)}
+                        style={{
+                            background: 'none', border: 'none', color: 'var(--accent-light)',
+                            fontSize: 14, cursor: 'pointer', marginBottom: 16, display: 'block',
+                        }}
+                    >
+                        ← Back
+                    </button>
+                    <button
+                        onClick={() => setShowChat(!showChat)}
+                        style={{
+                            background: showChat ? 'rgba(124, 58, 237, 0.15)' : 'var(--bg-card-hover)',
+                            border: showChat ? '1px solid rgba(124, 58, 237, 0.4)' : '1px solid var(--border)',
+                            color: showChat ? '#a78bfa' : 'var(--text-secondary)',
+                            padding: '4px 12px', borderRadius: 6,
+                            fontSize: 12, cursor: 'pointer',
+                            transition: 'all 0.15s',
+                            marginBottom: 16,
+                        }}
+                    >
+                        {showChat ? '🧠 Hide Chat' : '🧠 Chat'}
+                    </button>
+                </div>
 
                 {isEditing ? (
                     <input
@@ -445,6 +465,21 @@ export default function NotePage() {
                     </div>
                 )
             }
-        </div >
+        </div>
+
+            {/* Right: Chat Panel */}
+            {showChat && (
+                <div style={{
+                    width: '380px',
+                    minWidth: '380px',
+                    height: 'calc(100vh - 100px)',
+                    position: 'sticky',
+                    top: '80px',
+                    marginLeft: '16px',
+                }}>
+                    <ChatPanel noteContext={{ id: note.id, title: note.title }} />
+                </div>
+            )}
+        </div>
     );
 }
