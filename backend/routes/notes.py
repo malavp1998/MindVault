@@ -153,19 +153,13 @@ async def create_youtube_note(
                 )
             raise HTTPException(status_code=400, detail=f"Transcription failed: {str(e)}")
 
-    # 2. Ask LLM to summarize natively
-    try:
-        summary_content = await summarize_youtube_video(transcript_text, content_language=lang)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM summarization failed: {str(e)}")
-
     if body.annotation:
-        summary_content = f"[{lang.upper()} User Annotation]: {body.annotation}\n\n{summary_content}"
+        transcript_text = f"[{lang.upper()} User Annotation]: {body.annotation}\n\n{transcript_text}"
 
     # 3. Save to DB with actual video title
     note = Note(
         title=video_title,
-        content=summary_content,
+        content=transcript_text,
         source_url=body.video_url,
         tags=["youtube", "video"],
         language=lang,

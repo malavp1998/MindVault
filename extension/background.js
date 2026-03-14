@@ -379,57 +379,17 @@ async function handleMessage(message) {
                 console.log("[MindVault] DOM scrape failed:", e.message)
             }
 
-            // ── DESCRIPTION FALLBACK ──────────────────────────────
-            if (!transcriptResult) {
-                try {
-                    const descResult = await chrome.scripting.executeScript({
-                        target: { tabId: tab.id },
-                        world: "ISOLATED",
-                        func: () => {
-                            const title = document.title
-                                ?.replace(" - YouTube", "")
-                                ?.trim() || ""
-                            const descEl = document.querySelector(
-                                "#description-inline-expander yt-attributed-string, " +
-                                "#description-inline-expander, " +
-                                "#description"
-                            )
-                            const description = descEl?.innerText?.trim() || ""
-                            return {
-                                transcript: `Video: ${title}\n\nDescription:\n${description}`.trim(),
-                                warning: "Full transcript unavailable — summarizing from description only"
-                            }
-                        }
-                    })
-
-                    const descData = descResult?.[0]?.result
-                    if (descData?.transcript) {
-                        transcriptResult = {
-                            ...descData,
-                            method: "description_fallback"
-                        }
-                    }
-                } catch (e) {
-                    console.log("[MindVault] Description fallback failed:", e.message)
-                }
-            }
-
-            // ── NAVIGATE BACK to Shorts if we converted ───────────
-            if (originalUrl) {
-                try {
-                    await chrome.tabs.update(tab.id, { url: originalUrl })
-                } catch (e) {
-                    console.log("[MindVault] Navigate-back failed:", e.message)
-                }
-            }
-
-            // ── GIVE UP ───────────────────────────────────────────
+            // ── FALLBACK TO BACKEND EXTRACTION ────────────────────
             if (!transcriptResult?.transcript) {
-                return {
-                    ok: false,
-                    error: "Could not extract transcript. " +
-                        "Please make sure the video has captions enabled."
-                }
+                console.log("[MindVault] Client-side extraction failed, delegating to backend.");
+                return await apiCall("/api/notes/youtube", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        video_url: message.videoUrl,
+                        title: message.videoTitle,
+                        annotation: message.annotation || ""
+                    })
+                })
             }
 
             // ── SEND TO BACKEND ───────────────────────────────────

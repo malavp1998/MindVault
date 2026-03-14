@@ -271,19 +271,17 @@ async function handleSummarizeYoutube() {
             // hide youtube banner
             document.getElementById("youtube-banner").classList.add("hidden")
 
+            // prepare tags string
+            const allTags = [
+                ...(note.auto_tags || []).map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`),
+                ...(note.user_tags || []).map(t => `<span class="tag tag-user">${escapeHtml(t)}</span>`)
+            ].join("")
+
             // show success result
+            showStatus("✅ Saved to Vault!", "success", allTags)
+
+            // Because showStatus replaces the HTML, we need to append the warning and link AFTER showStatus renders it
             const resultEl = document.getElementById("save-result")
-            resultEl.classList.remove("hidden")
-
-            // show tags
-            const tagsEl = document.getElementById("result-tags")
-            tagsEl.innerHTML = (note.auto_tags || [])
-                .map(t => `<span class="tag tag-auto">${escapeHtml(t)}</span>`)
-                .join("")
-
-            // show warning if description fallback — remove any existing first
-            const existingWarn = resultEl.querySelector(".warn-msg")
-            if (existingWarn) existingWarn.remove()
 
             if (note.warning) {
                 const warnEl = document.createElement("div")
@@ -293,15 +291,10 @@ async function handleSummarizeYoutube() {
                 resultEl.appendChild(warnEl)
             }
 
-            // IMPORTANT — add clickable link using REAL note ID from backend
-            // note.id is the actual PostgreSQL UUID returned from the server
             if (note.id) {
-                const existingLink = resultEl.querySelector(".note-link")
-                if (existingLink) existingLink.remove()
-
                 const linkEl = document.createElement("div")
                 linkEl.className = "note-link"
-                linkEl.style.cssText = "margin-top:8px;cursor:pointer;color:#a78bfa;font-size:11px;"
+                linkEl.style.cssText = "margin-top:8px;cursor:pointer;color:#a78bfa;font-size:12px;font-weight:600;"
                 linkEl.textContent = "→ Open in vault"
                 linkEl.addEventListener("click", () => {
                     chrome.tabs.create({
