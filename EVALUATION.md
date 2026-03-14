@@ -80,7 +80,6 @@ There were only 2 queries out of 50 that failed to retrieve their expected notes
 | grpc | 1 | 0.0164 |
 | stripe | 2 | 0.0244 |
 | linus | 2 | 0.0163 |
-| alcohol bad effects | 0 | No matching notes |
 | how does attention work | 0 | No matching notes |
 
 ### Votes
