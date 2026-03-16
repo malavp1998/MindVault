@@ -80,15 +80,28 @@ async def propose_create_note(title: str, content: str) -> dict:
 
 
 @tool
-async def propose_update_note(note_id: str, note_title: str, original_content: str, new_content: str) -> dict:
+async def propose_update_note(note_id: str, note_title: str, new_content: str, config: RunnableConfig) -> dict:
     """
-    Propose updating an existing note. Returns a diff preview — never writes directly.
+    Propose updating an existing note. Fetches existing content from DB automatically.
+    Returns a diff preview — never writes directly.
     The caller must store this as a PendingAgentAction and ask user for confirmation.
+
+    IMPORTANT: `new_content` must contain the COMPLETE final note content — not a description
+    of changes. You MUST first call `read_note` to get the existing content, then compose
+    the full updated text incorporating both old content and your additions/edits.
     """
     try:
-        uuid.UUID(note_id)
+        valid_id = uuid.UUID(note_id)
     except ValueError:
         return {"error": f"Invalid note ID '{note_id}'. You MUST use the `search_vault` tool to find the exact, valid UUID format note_id first for the note titled '{note_title}'."}
+
+    # Fetch the real original content from DB so diffs are always accurate
+    db: AsyncSession = config["configurable"]["db"]
+    result = await db.execute(select(Note).where(Note.id == valid_id))
+    note = result.scalar_one_or_none()
+    if not note:
+        return {"error": f"Note '{note_title}' (ID: {note_id}) not found in the database."}
+    original_content = note.content or ""
 
     return {
         "action_type": "update_note",

@@ -251,6 +251,7 @@ async def call_agent(state: AgentState) -> AgentState:
 <constraint id="ids">For update/delete: use exact UUID `id` field from search_vault/read_note results — never use title or topic name as note_id</constraint>
 <constraint id="relevance">Only cite search results that directly answer the query — ignore tangential matches</constraint>
 <constraint id="hallucination">Never invent note content — only use what tool results return</constraint>
+<constraint id="edit_workflow">For UPDATE: you MUST first call `search_vault` to find the note, then call `read_note` to fetch its full current content. Then compose `new_content` as the COMPLETE literal final text of the note — combining the existing content with your edits. NEVER use placeholder descriptions like "existing_note_content" — always use the real text returned by `read_note`.</constraint>
 </constraints>
 
 <reasoning_pattern>
