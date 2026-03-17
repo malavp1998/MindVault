@@ -430,8 +430,8 @@ export default function VaultPage() {
                             top: 'calc(100% + 8px)',
                             right: 0,
                             width: 320,
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-color)',
+                            background: '#ffffff',
+                            border: '1px solid var(--border)',
                             borderRadius: 12,
                             boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
                             zIndex: 100,
@@ -473,7 +473,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Languages Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                     <h4 style={{ margin: 0, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Language</h4>
                                     <button 
@@ -503,7 +503,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Sort By Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Sort By</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -530,7 +530,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* View Density Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>View Density</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -553,7 +553,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Group By Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Group By</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -578,7 +578,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Show/Hide Toggles */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Show / Hide</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -663,8 +663,8 @@ export default function VaultPage() {
             {/* Create Note Inline Form */}
             {isCreatingNote && (
                 <div style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
+                    background: '#ffffff',
+                    border: '1px solid var(--border)',
                     borderRadius: 16,
                     padding: 20,
                     marginBottom: 24,
@@ -680,7 +680,7 @@ export default function VaultPage() {
                             width: '100%',
                             background: 'transparent',
                             border: 'none',
-                            borderBottom: '1px solid var(--border-color)',
+                            borderBottom: '1px solid var(--border)',
                             fontSize: 18,
                             fontWeight: 600,
                             color: 'var(--text-primary)',
@@ -747,7 +747,7 @@ export default function VaultPage() {
                                     style={{
                                         background: 'transparent',
                                         color: 'var(--text-primary)',
-                                        border: '1px solid var(--border-color)',
+                                        border: '1px solid var(--border)',
                                         padding: '10px 20px',
                                         borderRadius: 10,
                                         fontWeight: 600,
@@ -769,10 +769,10 @@ export default function VaultPage() {
                                 disabled={isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === ''))}
                                 style={{
                                     background: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === ''))
-                                        ? 'var(--bg-secondary)'
+                                        ? '#f0eeeb'
                                         : 'linear-gradient(135deg, #10B981, #059669)',
                                     color: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? 'var(--text-muted)' : '#fff',
-                                    border: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? '1px solid var(--border-color)' : 'none',
+                                    border: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? '1px solid var(--border)' : 'none',
                                     padding: '10px 24px',
                                     borderRadius: 10,
                                     fontWeight: 600,
@@ -814,7 +814,7 @@ export default function VaultPage() {
                         {notes.length > 0 && (
                             <button 
                                 onClick={() => { clearAllFilters(); setKeywordSearch(''); }}
-                                style={{ marginTop: 16, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}
+                                style={{ marginTop: 16, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}
                             >
                                 Clear All Filters
                             </button>
@@ -828,7 +828,7 @@ export default function VaultPage() {
                                     <h3 style={{ 
                                         margin: '0 0 16px 0', 
                                         paddingBottom: 8, 
-                                        borderBottom: '1px solid var(--border-color)',
+                                        borderBottom: '1px solid var(--border)',
                                         color: 'var(--text-primary)',
                                         fontSize: 16,
                                         display: 'flex',
@@ -897,8 +897,9 @@ export default function VaultPage() {
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                                     {note.estimated_retention !== undefined && (
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }} title={`Memory Confidence: ${Math.round(note.estimated_retention * 100)}%`}>
-                                                            <span className="note-retention-badge" style={{ color: note.estimated_retention >= 0.70 ? '#10B981' : note.estimated_retention >= 0.40 ? '#F59E0B' : '#EF4444' }}>
-                                                                {Math.round(note.estimated_retention * 100)}%
+                                                            <Brain size={14} />
+                                                            <span className="note-retention-badge">
+                                                                Memory {Math.round(note.estimated_retention * 100)}%
                                                             </span>
                                                         </div>
                                                     )}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react"
 import { api, submitVote } from "../api"
 import ConfirmationCard from "./ConfirmationCard"
+import ReactMarkdown from 'react-markdown'
+import { Send, FileText, ThumbsUp, ThumbsDown, Brain } from 'lucide-react'
 
 function MessageBubble({ message, setMessages, prevMessage }) {
     const [votes, setVotes] = useState({})
@@ -19,21 +21,8 @@ function MessageBubble({ message, setMessages, prevMessage }) {
     }
 
     return (
-        <div style={{
-            display: "flex", gap: "10px",
-            flexDirection: isUser ? "row-reverse" : "row",
-        }}>
-            <div style={{
-                width: "28px", height: "28px", borderRadius: "50%",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "12px", flexShrink: 0,
-                background: isUser ? "var(--border)" : "linear-gradient(135deg, #7c3aed, #6d28d9)",
-            }}>{isUser ? "👤" : "🧠"}</div>
-
-            <div style={{
-                maxWidth: "100%", display: "flex", flexDirection: "column",
-                alignItems: isUser ? "flex-end" : "flex-start", gap: "4px",
-            }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start', gap: 8 }}>
+            <div className={isUser ? "chat-message-user" : "chat-message-ai"}>
                 {message.type === "pending_confirmation" && message.pendingAction ? (
                     <ConfirmationCard
                         action={message.pendingAction}
@@ -46,55 +35,42 @@ function MessageBubble({ message, setMessages, prevMessage }) {
                         }}
                     />
                 ) : (
-                    <div style={{
-                        padding: "10px 14px",
-                        borderRadius: isUser ? "14px 4px 14px 14px" : "4px 14px 14px 14px",
-                        fontSize: "12px", lineHeight: 1.6, whiteSpace: "pre-wrap",
-                        background: isUser ? "#7c3aed" : "var(--bg-card-hover)",
-                        color: isUser ? "white" : "var(--text-primary)",
-                    }}>{message.content}</div>
+                    <div className={!isUser ? "prose-content" : ""} style={isUser ? { margin: 0 } : {}}>
+                        {isUser ? message.content : <ReactMarkdown>{message.content}</ReactMarkdown>}
+                    </div>
                 )}
 
                 {!isUser && citedNotes.length > 0 && (
-                    <div>
-                        <p style={{ fontSize: "9px", color: "var(--text-muted)", margin: "0 0 3px 4px" }}>Sources:</p>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                    <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            Sources
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                             {citedNotes.map(note => (
-                                <a key={note.id} href={`/note/${note.id}`} style={{
-                                    background: "var(--bg-card)", border: "1px solid var(--border)",
-                                    borderRadius: "6px", padding: "3px 8px", fontSize: "10px",
-                                    color: "var(--text-secondary)", textDecoration: "none",
-                                    display: "flex", alignItems: "center", gap: "4px",
-                                    transition: "border-color 0.15s",
-                                }}
-                                    onMouseEnter={e => { e.currentTarget.style.borderColor = "#7c3aed" }}
-                                    onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)" }}
-                                >
-                                    <span>📄</span>
-                                    <span style={{
-                                        maxWidth: "100px", overflow: "hidden",
-                                        textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                    }}>{note.title || "Untitled"}</span>
-                                    {note.similarity != null && (
-                                        <span style={{ color: "#7c3aed", fontWeight: 600 }}>
-                                            {Math.round(note.similarity * 100)}%
+                                <div key={note.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <a href={`/note/${note.id}`} className="source-chip" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
+                                        <FileText size={12} stroke="var(--accent)" strokeWidth={2} />
+                                        <span style={{ fontWeight: 500, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {note.title || "Untitled"}
                                         </span>
-                                    )}
-                                    <div style={{ display: 'flex', gap: '2px', marginLeft: 'auto', paddingLeft: '4px', borderLeft: '1px solid var(--border)' }}>
-                                        <button onClick={(e) => handleVote(e, note.id, 1)} style={{
-                                            background: 'none', border: 'none', cursor: 'pointer', padding: '0 1px',
-                                            opacity: votes[note.id] === undefined || votes[note.id] === 1 ? 1 : 0.3,
-                                            filter: votes[note.id] === 1 ? 'drop-shadow(0 0 2px rgba(74,222,128,0.5))' : 'grayscale(1)',
-                                            fontSize: '10px', transition: 'all 0.2s'
-                                        }} title="Relevant">👍</button>
-                                        <button onClick={(e) => handleVote(e, note.id, -1)} style={{
-                                            background: 'none', border: 'none', cursor: 'pointer', padding: '0 1px',
-                                            opacity: votes[note.id] === undefined || votes[note.id] === -1 ? 1 : 0.3,
-                                            filter: votes[note.id] === -1 ? 'drop-shadow(0 0 2px rgba(248,113,113,0.5))' : 'grayscale(1)',
-                                            fontSize: '10px', transition: 'all 0.2s'
-                                        }} title="Not relevant">👎</button>
+                                    </a>
+                                    <div style={{ display: 'flex', gap: 4, marginLeft: 2 }}>
+                                        <button
+                                            onClick={(e) => handleVote(e, note.id, 1)}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: votes[note.id] === 1 ? '#22c55e' : 'var(--text-muted)' }}
+                                            title="Upvote source"
+                                        >
+                                            <ThumbsUp size={14} fill={votes[note.id] === 1 ? '#22c55e' : 'none'} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => handleVote(e, note.id, -1)}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: votes[note.id] === -1 ? '#ef4444' : 'var(--text-muted)' }}
+                                            title="Downvote source"
+                                        >
+                                            <ThumbsDown size={14} fill={votes[note.id] === -1 ? '#ef4444' : 'none'} />
+                                        </button>
                                     </div>
-                                </a>
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -189,45 +165,44 @@ export default function ChatPanel({ noteContext }) {
             display: "flex",
             flexDirection: "column",
             height: "100%",
-            background: "var(--bg-secondary)",
-            borderRadius: "12px",
-            border: "1px solid var(--border-color)",
+            background: "#fff",
             overflow: "hidden",
+            position: "relative"
         }}>
             {/* Header */}
             <div style={{
-                padding: "12px 16px",
+                padding: "16px 24px",
                 borderBottom: "1px solid var(--border)",
                 display: "flex",
                 alignItems: "center",
-                gap: "8px",
-                background: "var(--bg-secondary)",
+                gap: "12px",
                 flexShrink: 0,
             }}>
-                <span style={{ fontSize: "16px" }}>🧠</span>
+                <div style={{ color: 'var(--accent)' }}>
+                    <Brain size={24} />
+                </div>
                 <div>
                     <h3 style={{
-                        fontSize: "13px", fontWeight: 600,
+                        fontSize: "0.875rem", fontWeight: 600,
                         color: "var(--text-primary)", margin: 0,
                     }}>Ask about this note</h3>
                     <p style={{
-                        fontSize: "10px", color: "var(--text-muted)", margin: 0,
+                        fontSize: "0.75rem", color: "var(--text-muted)", margin: 0,
                     }}>Powered by your vault</p>
                 </div>
                 {messages.length > 0 && (
                     <button
-                        onClick={() => { setMessages([]); setSessionId(null) }}
+                        onClick={() => { setMessages([]); setSessionId(null); setInput("") }}
                         style={{
                             marginLeft: "auto",
-                            background: "none", border: "none",
+                            background: "var(--bg)", border: "none",
                             color: "var(--text-muted)", cursor: "pointer",
-                            fontSize: "10px", padding: "4px 8px",
-                            borderRadius: "6px",
+                            fontSize: "0.75rem", padding: "6px 12px",
+                            borderRadius: "16px",
                             transition: "all 0.15s",
+                            fontWeight: 500
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.color = "#ef4444" }}
-                        onMouseLeave={e => { e.currentTarget.style.color = "var(--text-muted)" }}
-                    >🧹 Clear</button>
+                    >Clear</button>
                 )}
             </div>
 
@@ -235,26 +210,26 @@ export default function ChatPanel({ noteContext }) {
             <div style={{
                 flex: 1,
                 overflowY: "auto",
-                padding: "12px",
+                padding: "24px",
             }}>
                 {messages.length === 0 && (
                     <div style={{
                         display: "flex", flexDirection: "column",
                         alignItems: "center", justifyContent: "center",
                         height: "100%", textAlign: "center",
-                        padding: "24px 16px",
                     }}>
-                        <div style={{ fontSize: "32px", marginBottom: "12px" }}>💬</div>
+                        <div style={{ marginBottom: "16px", color: 'var(--accent)', opacity: 0.5 }}>
+                            <Brain size={48} />
+                        </div>
                         <p style={{
-                            fontSize: "12px", color: "var(--text-muted)",
-                            maxWidth: "280px", lineHeight: 1.5,
+                            fontSize: "0.875rem", color: "var(--text-muted)",
+                            maxWidth: "280px", lineHeight: 1.5, marginBottom: "24px"
                         }}>
                             Ask questions about this note or anything in your vault.
                         </p>
                         {noteContext && (
                             <div style={{
-                                marginTop: "12px",
-                                display: "flex", flexDirection: "column", gap: "6px",
+                                display: "flex", flexDirection: "column", gap: "8px",
                                 width: "100%",
                             }}>
                                 {[
@@ -265,24 +240,12 @@ export default function ChatPanel({ noteContext }) {
                                     <button
                                         key={i}
                                         onClick={() => { setInput(s); inputRef.current?.focus() }}
+                                        className="note-card"
                                         style={{
-                                            background: "var(--bg-card-hover)",
-                                            border: "1px solid var(--border)",
-                                            borderRadius: "8px",
-                                            padding: "8px 12px",
+                                            padding: "12px 16px",
                                             textAlign: "left",
+                                            fontSize: "0.8125rem",
                                             color: "var(--text-secondary)",
-                                            fontSize: "11px",
-                                            cursor: "pointer",
-                                            transition: "all 0.15s",
-                                        }}
-                                        onMouseEnter={e => {
-                                            e.currentTarget.style.borderColor = "#7c3aed"
-                                            e.currentTarget.style.color = "var(--text-primary)"
-                                        }}
-                                        onMouseLeave={e => {
-                                            e.currentTarget.style.borderColor = "var(--border)"
-                                            e.currentTarget.style.color = "var(--text-secondary)"
                                         }}
                                     >{s}</button>
                                 ))}
@@ -291,7 +254,7 @@ export default function ChatPanel({ noteContext }) {
                     </div>
                 )}
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
                     {messages.map((msg, idx) => (
                         <MessageBubble
                             key={msg.id}
@@ -304,46 +267,26 @@ export default function ChatPanel({ noteContext }) {
 
                 {/* Typing indicator */}
                 {loading && (
-                    <div style={{
-                        display: "flex", gap: "8px", marginTop: "14px",
-                    }}>
-                        <div style={{
-                            width: "28px", height: "28px", borderRadius: "50%",
-                            background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-                            display: "flex", alignItems: "center",
-                            justifyContent: "center", fontSize: "12px",
-                            flexShrink: 0,
-                        }}>🧠</div>
-                        <div style={{
-                            background: "var(--bg-card-hover)",
-                            borderRadius: "14px 14px 14px 4px",
-                            padding: "10px 14px",
-                            display: "flex", gap: "4px", alignItems: "center",
-                        }}>
-                            {[0, 150, 300].map(d => (
-                                <span key={d} style={{
-                                    width: "5px", height: "5px",
-                                    background: "var(--text-muted)",
-                                    borderRadius: "50%",
-                                    animation: "chatPanelBounce 1.4s infinite",
-                                    animationDelay: `${d}ms`,
-                                }} />
-                            ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, marginTop: 24 }}>
+                        <div className="chat-message-ai">
+                            <div style={{ display: 'flex', gap: 4, padding: '12px 16px', background: 'var(--accent-light)', borderRadius: 20 }}>
+                                {[0, 150, 300].map(d => (
+                                    <span key={d} style={{
+                                        width: 6, height: 6, background: 'var(--accent)', borderRadius: '50%',
+                                        animation: 'bounce 1.4s infinite', animationDelay: `${d}ms`
+                                    }} />
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}
 
-                <div ref={bottomRef} />
+                <div ref={bottomRef} style={{ height: 20 }} />
             </div>
 
-            {/* Input */}
-            <div style={{
-                padding: "10px 12px",
-                borderTop: "1px solid var(--border)",
-                background: "var(--bg-secondary)",
-                flexShrink: 0,
-            }}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+            {/* Input Container Overlay */}
+            <div className="chat-input-container" style={{ padding: '0 24px 24px' }}>
+                <div className="chat-input-wrap">
                     <textarea
                         ref={inputRef}
                         value={input}
@@ -356,46 +299,24 @@ export default function ChatPanel({ noteContext }) {
                         }}
                         placeholder="Ask about this note..."
                         rows={1}
-                        style={{
-                            flex: 1,
-                            background: "var(--bg-card-hover)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "10px",
-                            padding: "10px 12px",
-                            color: "var(--text-primary)",
-                            fontSize: "12px",
-                            resize: "none",
-                            outline: "none",
-                            minHeight: "38px",
-                            maxHeight: "80px",
-                            fontFamily: "inherit",
-                        }}
-                        onFocus={e => e.target.style.borderColor = "#7c3aed"}
-                        onBlur={e => e.target.style.borderColor = "var(--border)"}
+                        className="chat-input-field"
+                        style={{ minHeight: '44px', padding: '12px 12px 12px 20px', fontSize: '0.875rem' }}
                     />
                     <button
                         onClick={sendMessage}
                         disabled={loading || !input.trim()}
-                        style={{
-                            background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: "10px",
-                            padding: "10px 14px",
-                            cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-                            opacity: loading || !input.trim() ? 0.4 : 1,
-                            fontSize: "14px",
-                            flexShrink: 0,
-                            transition: "opacity 0.15s",
-                        }}
-                    >↑</button>
+                        className="chat-send-btn"
+                        style={{ width: '36px', height: '36px', marginBottom: '8px', marginRight: '8px' }}
+                    >
+                        <Send size={16} strokeWidth={2} />
+                    </button>
                 </div>
             </div>
 
             <style>{`
-                @keyframes chatPanelBounce {
+                @keyframes bounce {
                     0%, 80%, 100% { transform: translateY(0); }
-                    40% { transform: translateY(-5px); }
+                    40% { transform: translateY(-6px); }
                 }
             `}</style>
         </div>

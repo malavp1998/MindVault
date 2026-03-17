@@ -45,6 +45,8 @@ services:
       - "5173:5173"
     env_file:
       - .env
+    environment:
+      - PROXY_BACKEND_URL=http://backend:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules

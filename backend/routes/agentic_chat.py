@@ -26,6 +26,11 @@ class ChatRequest(BaseModel):
     conversation_history: List[Dict] = []   # [{role, content}, ...]
     session_id: Optional[str] = None
 
+class ChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    is_pinned: Optional[bool] = None
+
+
 
 class ChatResponse(BaseModel):
     response: str
@@ -471,6 +476,7 @@ async def create_session(
     return {
         "id": str(session.id),
         "title": session.title,
+        "is_pinned": session.is_pinned,
         "created_at": session.created_at.isoformat(),
         "updated_at": session.updated_at.isoformat(),
         "message_count": 0,
@@ -500,12 +506,41 @@ async def list_sessions(
         {
             "id": str(session.id),
             "title": session.title,
+            "is_pinned": session.is_pinned,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "message_count": count,
         }
         for session, count in rows
     ]
+
+
+@router.patch("/sessions/{session_id}")
+async def update_session(
+    session_id: uuid.UUID,
+    update_data: ChatSessionUpdate,
+    current_user: User = CurrentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update chat session metadata (title, pinned status)."""
+    session = await db.get(ChatSession, session_id)
+    if not session or session.user_id != current_user.id:
+        raise HTTPException(404, "Session not found")
+        
+    if update_data.title is not None:
+        session.title = update_data.title
+    if update_data.is_pinned is not None:
+        session.is_pinned = update_data.is_pinned
+        
+    session.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    
+    return {
+        "id": str(session.id),
+        "title": session.title,
+        "is_pinned": session.is_pinned,
+        "updated_at": session.updated_at.isoformat(),
+    }
 
 
 @router.get("/sessions/{session_id}/messages")

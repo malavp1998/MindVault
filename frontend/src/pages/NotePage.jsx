@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import RichTextEditor from '../components/RichTextEditor';
 import ChatPanel from '../components/ChatPanel';
 import SearchPanel from '../components/SearchPanel';
+import { ArrowLeft, Calendar, ExternalLink, PenLine, RefreshCw, Trash2, Tag as TagIcon, Sparkles, Info, Brain, Search, X } from 'lucide-react';
 
 export default function NotePage() {
     const { id } = useParams();
@@ -188,318 +189,254 @@ export default function NotePage() {
     }
 
     return (
-        <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start', minHeight: 'calc(100vh - 100px)' }}>
+        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
             {/* Left: Note detail */}
-            <div className="note-detail" style={{ flex: 1, minWidth: 0 }}>
-            {/* Header */}
-            <div className="note-detail-header">
-                <button
+            <div style={{ flex: 1, overflowY: 'auto', padding: '64px 80px', background: '#fff' }}>
+                {/* Header */}
+                <button 
                     onClick={() => navigate(-1)}
-                    className="back-link"
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', marginBottom: 40, padding: 0 }}
                 >
-                    ← Back
+                    <ArrowLeft size={16} strokeWidth={2} /> Back to Vault
                 </button>
 
-                {isEditing ? (
-                    <input
-                        className="note-title-input"
-                        value={editTitle}
-                        onChange={e => setEditTitle(e.target.value)}
-                        style={{ width: '100%', fontSize: '2em', fontWeight: 'bold', marginBottom: '8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px' }}
-                    />
-                ) : (
-                    <h1 className="note-detail-title">{note.title}</h1>
-                )}
-
-                <div className="note-detail-meta">
-                    <span>📅 {new Date(note.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                    {note.source_url && (
-                        <a href={note.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13 }}>
-                            🔗 Source
-                        </a>
+                <div style={{ marginBottom: 48 }}>
+                    {isEditing ? (
+                        <input
+                            value={editTitle}
+                            onChange={e => setEditTitle(e.target.value)}
+                            style={{ width: '100%', fontSize: '3.125rem', fontWeight: 700, margin: 0, lineHeight: 1.2, background: 'var(--bg)', color: 'var(--text-dark)', border: '1px solid var(--border)', borderRadius: '12px', padding: '12px 16px', outline: 'none' }}
+                        />
+                    ) : (
+                        <h1 style={{ fontSize: '3.125rem', fontWeight: 700, color: 'var(--text-dark)', margin: 0, lineHeight: 1.2 }}>
+                            {note.title}
+                        </h1>
                     )}
-                    {note.topic_name && <span className="tag">{note.topic_name}</span>}
-                    {!note.is_processed && <span className="processing-badge">Processing</span>}
-                    <button
-                        onClick={handleReprocess}
-                        disabled={processing || (note && !note.is_processed)}
-                        style={{
-                            background: 'var(--bg-card-hover)', border: '1px solid var(--border)',
-                            color: 'var(--text-secondary)', padding: '4px 12px', borderRadius: 6,
-                            fontSize: 12, cursor: 'pointer',
-                        }}
-                    >
-                        {processing || (note && !note.is_processed) ? '⏳ Processing...' : '🔄 Reprocess'}
-                    </button>
-                    <button
-                        onClick={handleDelete}
-                        disabled={isDeleting || isSaving}
-                        style={{
-                            background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.5)',
-                            color: '#ef4444', padding: '4px 12px', borderRadius: 6,
-                            marginLeft: 8, fontSize: 12, cursor: 'pointer',
-                        }}
-                    >
-                        {isDeleting ? '⏳ Deleting...' : '🗑️ Delete'}
-                    </button>
-                    {!isEditing && (
-                        <button
-                            onClick={handleStartEdit}
-                            style={{
-                                background: 'var(--bg-card-hover)', border: '1px solid var(--border)',
-                                color: 'var(--text-primary)', padding: '4px 12px', borderRadius: 6,
-                                marginLeft: 8, fontSize: 12, cursor: 'pointer',
-                            }}
-                        >
-                            ✏️ Edit
-                        </button>
-                    )}
-                </div>
-            </div>
 
-            {/* Tags Area */}
-            <div style={{ marginBottom: 24, padding: '16px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-
-                {/* Auto Tags (AI Generated) */}
-                <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 500 }}>✨ AI Generated Tags</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {Array.isArray(note.auto_tags) && note.auto_tags.length > 0 ? (
-                            note.auto_tags.map(tag => (
-                                <span key={`auto-${tag}`} className="tag" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.3)' }}>
-                                    {tag}
-                                </span>
-                            ))
-                        ) : (
-                            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tags generated yet.</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginTop: 24, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                            <Calendar size={16} strokeWidth={2} /> 
+                            {new Date(note.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </div>
+                        
+                        {note.source_url && (
+                            <a href={note.source_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}>
+                                <ExternalLink size={16} strokeWidth={2} /> Source
+                            </a>
                         )}
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            {!isEditing && (
+                                <button
+                                    onClick={handleStartEdit}
+                                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 16px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dark)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                                >
+                                    <PenLine size={14} strokeWidth={2} /> Edit Note
+                                </button>
+                            )}
+                            
+                            <button
+                                onClick={handleReprocess}
+                                disabled={processing || (note && !note.is_processed)}
+                                style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 16px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dark)', cursor: processing || (note && !note.is_processed) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: processing || (note && !note.is_processed) ? 0.6 : 1 }}
+                            >
+                                <RefreshCw size={14} strokeWidth={2} className={processing || (note && !note.is_processed) ? "animate-spin" : ""} /> Reprocess
+                            </button>
+                            
+                            <button
+                                onClick={handleDelete}
+                                disabled={isDeleting || isSaving}
+                                style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)', borderRadius: 20, padding: '6px 16px', fontSize: '0.75rem', fontWeight: 600, color: '#ef4444', cursor: isDeleting || isSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: isDeleting || isSaving ? 0.6 : 1 }}
+                            >
+                                <Trash2 size={14} strokeWidth={2} /> Delete
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                {/* User Tags (Manual) */}
-                <div>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span>🏷️ Custom Tags</span>
-                        <div>
-                            <button
-                                onClick={() => setShowTagInput(!showTagInput)}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, marginRight: 12 }}
-                            >
-                                + Add Tag
-                            </button>
+                {/* Tags Area */}
+                <div style={{ background: 'var(--bg)', borderRadius: 24, padding: 32, marginBottom: 48, border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <TagIcon size={14} strokeWidth={2} /> Tags & Context
+                        </h3>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            {showTagInput ? (
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={newTag}
+                                    onChange={e => setNewTag(e.target.value)}
+                                    onKeyDown={handleAddTag}
+                                    onBlur={() => setShowTagInput(false)}
+                                    placeholder="Type and press Enter..."
+                                    style={{ background: '#fff', border: '1px solid var(--border)', color: 'var(--text-dark)', padding: '4px 8px', borderRadius: 6, fontSize: '0.75rem', outline: 'none', width: 140 }}
+                                />
+                            ) : (
+                                <button
+                                    onClick={() => setShowTagInput(!showTagInput)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                    + Add Tag
+                                </button>
+                            )}
                             <button
                                 onClick={handleSuggestTags}
                                 disabled={suggestingTags}
-                                style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontSize: 12 }}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600, cursor: suggestingTags ? 'not-allowed' : 'pointer' }}
                             >
-                                {suggestingTags ? '⏳ Thinking...' : '🪄 Suggest'}
+                                {suggestingTags ? 'Thinking...' : 'Suggest ✨'}
                             </button>
                         </div>
                     </div>
-
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                        {Array.isArray(note.user_tags) && note.user_tags.map(tag => (
-                            <span key={`user-${tag}`} className="tag" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {suggestedTags.length > 0 && suggestedTags.map(tag => (
+                            <button
+                                key={`suggested-${tag}`}
+                                onClick={() => acceptSuggestedTag(tag)}
+                                style={{ background: 'rgba(148, 78, 135, 0.05)', border: '1px dashed rgba(148, 78, 135, 0.3)', borderRadius: 20, padding: '5px 13px', fontSize: '0.875rem', fontWeight: 500, color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                            >
+                                + {tag}
+                            </button>
+                        ))}
+                        {Array.from(new Set([...(note.user_tags || []), ...(note.auto_tags || []), ...(note.tags || [])])).map(tag => (
+                            <span key={tag} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 14px', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: 6 }}>
                                 {tag}
-                                <button onClick={() => handleRemoveTag(tag)} style={{ background: 'none', border: 'none', color: '#34d399', cursor: 'pointer', padding: 0, fontSize: 12, opacity: 0.7 }}>×</button>
+                                <X size={14} strokeWidth={2} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => handleRemoveTag(tag)} />
                             </span>
                         ))}
-
-                        {/* Legacy tags fallback */}
-                        {Array.isArray(note.tags) && note.tags.length > 0 && (!note.auto_tags || note.auto_tags.length === 0) && (!note.user_tags || note.user_tags.length === 0) && (
-                            note.tags.map(tag => (
-                                <span key={`legacy-${tag}`} className="tag">{tag}</span>
-                            ))
+                        {Array.from(new Set([...(note.user_tags || []), ...(note.auto_tags || []), ...(note.tags || [])])).length === 0 && suggestedTags.length === 0 && (
+                            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>No tags yet.</span>
                         )}
+                    </div>
+                </div>
 
-                        {showTagInput && (
-                            <input
-                                autoFocus
-                                type="text"
-                                value={newTag}
-                                onChange={e => setNewTag(e.target.value)}
-                                onKeyDown={handleAddTag}
-                                onBlur={() => setShowTagInput(false)}
-                                placeholder="Type and press Enter..."
-                                style={{
-                                    background: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)',
-                                    padding: '4px 8px', borderRadius: '6px', fontSize: 13, outline: 'none', width: 140
-                                }}
-                            />
+                {/* Key Concepts */}
+                {Array.isArray(note.key_concepts) && note.key_concepts.length > 0 && (
+                    <div style={{ background: 'var(--bg)', borderRadius: 24, padding: 32, marginBottom: 48, border: '1px solid var(--border)' }}>
+                        <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Sparkles size={14} strokeWidth={2} /> Key Concepts
+                        </h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {note.key_concepts.map((concept, i) => (
+                                <span key={i} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 14px', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-dark)' }}>
+                                    {concept}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Summary */}
+                {note.summary && (
+                    <div style={{ marginBottom: 48 }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-dark)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Sparkles size={20} strokeWidth={2} color="var(--accent)" /> AI Summary
+                        </h3>
+                        <div style={{ background: 'var(--bg)', padding: 32, borderRadius: 24, fontSize: '1.05rem', lineHeight: 1.7, color: 'var(--text-dark)', border: '1px solid var(--border)' }}>
+                            <div className="prose-content">
+                                <ReactMarkdown>{note.summary}</ReactMarkdown>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Full Content */}
+                <div style={{ marginBottom: 48 }}>
+                    <div 
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: 16 }}
+                        onClick={() => setShowContent(!showContent)}
+                    >
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-dark)', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Info size={20} strokeWidth={2} color="var(--text-muted)" /> Full Content
+                        </h3>
+                        {!isEditing && (
+                            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                                {showContent ? 'Hide' : 'Show'}
+                            </span>
                         )}
                     </div>
 
-                    {/* Pending Suggestions */}
-                    {suggestedTags.length > 0 && (
-                        <div style={{ marginTop: 12, padding: 12, background: 'rgba(59, 130, 246, 0.05)', borderRadius: 8, border: '1px dashed rgba(59, 130, 246, 0.2)' }}>
-                            <div style={{ fontSize: 12, color: '#60a5fa', marginBottom: 8 }}>Suggested by AI (Click to accept):</div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                                {suggestedTags.map(tag => (
+                    {(showContent || isEditing) && (
+                        isEditing ? (
+                            <div style={{ marginBottom: 16, marginTop: 12 }}>
+                                <div style={{ position: 'relative' }}>
+                                    <RichTextEditor 
+                                        content={editContent} 
+                                        onChange={setEditContent} 
+                                    />
+                                </div>
+                                <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
                                     <button
-                                        key={`suggested-${tag}`}
-                                        onClick={() => acceptSuggestedTag(tag)}
-                                        className="tag"
-                                        style={{ background: 'transparent', color: 'var(--text-primary)', borderColor: 'var(--border-color)', cursor: 'pointer', transition: 'all 0.2s' }}
-                                        onMouseOver={e => e.currentTarget.style.borderColor = '#60a5fa'}
-                                        onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                                        onClick={handleSaveEdit}
+                                        disabled={isSaving}
+                                        style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}
                                     >
-                                        + {tag}
+                                        {isSaving ? 'Saving...' : 'Save Changes'}
                                     </button>
-                                ))}
+                                    <button
+                                        onClick={() => setIsEditing(false)}
+                                        disabled={isSaving}
+                                        style={{ background: '#fff', color: 'var(--text-dark)', border: '1px solid var(--border)', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* AI Summary */}
-            {note.summary && (
-                <div className="note-section">
-                    <h3 className="note-section-title">✨ AI Summary</h3>
-                    <div className="note-summary-box">
-                        <ReactMarkdown>{note.summary}</ReactMarkdown>
-                    </div>
-                </div>
-            )}
-
-            {/* Key Concepts */}
-            {Array.isArray(note.key_concepts) && note.key_concepts.length > 0 && (
-                <div className="note-section">
-                    <h3 className="note-section-title">🔑 Key Concepts</h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {note.key_concepts.map((concept, i) => (
-                            <span key={i} className="tag">{concept}</span>
-                        ))}
-                    </div>
-                </div>
-            )
-            }
-
-            {/* Content */}
-            <div className="note-section">
-                <div 
-                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none', marginBottom: showContent || isEditing ? 12 : 0 }}
-                    onClick={() => setShowContent(!showContent)}
-                >
-                    <h3 className="note-section-title" style={{ margin: 0 }}>📄 Content</h3>
-                    {!isEditing && (
-                        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                            {showContent ? '▼ Hide' : '▶ Show'}
-                        </span>
+                        ) : (
+                            <div className="prose-content" style={{ marginTop: 12 }} dangerouslySetInnerHTML={{ __html: note.content }} />
+                        )
                     )}
                 </div>
 
-                {(showContent || isEditing) && (
-                    isEditing ? (
-                        <div style={{ marginBottom: 16, marginTop: 12 }}>
-                            <div style={{ position: 'relative' }}>
-                                <RichTextEditor 
-                                    content={editContent} 
-                                    onChange={setEditContent} 
-                                />
-                            </div>
-                            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                                <button
-                                    onClick={handleSaveEdit}
-                                    disabled={isSaving}
-                                    style={{
-                                        background: 'var(--accent)', color: '#fff', border: 'none',
-                                        padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
-                                        fontWeight: 500
-                                    }}
+                {/* Linked Notes */}
+                {note.backlinks && note.backlinks.length > 0 && (
+                    <div style={{ marginBottom: 48 }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-dark)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <ExternalLink size={20} strokeWidth={2} color="var(--text-muted)" /> Linked Notes ({note.backlinks.length})
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {note.backlinks.map(link => (
+                                <div
+                                    key={link.id}
+                                    onClick={() => navigate(`/note/${link.note_id}`)}
+                                    style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, padding: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'border-color 0.2s' }}
+                                    onMouseOver={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                                    onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border)'}
                                 >
-                                    {isSaving ? 'Saving...' : '💾 Save Changes'}
-                                </button>
-                                <button
-                                    onClick={() => setIsEditing(false)}
-                                    disabled={isSaving}
-                                    style={{
-                                        background: 'var(--bg-card-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
-                                        padding: '6px 16px', borderRadius: 6, cursor: 'pointer',
-                                        fontWeight: 500
-                                    }}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
+                                    <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-dark)' }}>{link.title}</span>
+                                    <span style={{ background: 'var(--bg)', padding: '4px 10px', borderRadius: 12, fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+                                        {(link.similarity_score * 100).toFixed(0)}% match
+                                    </span>
+                                </div>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="note-detail-content tiptap-render" style={{ marginTop: 12 }} dangerouslySetInnerHTML={{ __html: note.content }} />
-                    )
+                    </div>
                 )}
             </div>
 
-            {/* Backlinks */}
-            {
-                note.backlinks && note.backlinks.length > 0 && (
-                    <div className="note-section">
-                        <h3 className="note-section-title">🔗 Linked Notes ({note.backlinks.length})</h3>
-                        {note.backlinks.map(link => (
-                            <div
-                                key={link.id}
-                                className="backlink-card"
-                                onClick={() => navigate(`/note/${link.note_id}`)}
-                            >
-                                <span style={{ fontWeight: 500, fontSize: 14 }}>{link.title}</span>
-                                <span className="similarity-badge">{(link.similarity_score * 100).toFixed(0)}% match</span>
-                            </div>
-                        ))}
-                    </div>
-                )
-            }
-        </div>
-
             {/* Right: Sidebar with Tabs */}
-            <div style={{
-                width: '380px',
-                minWidth: '380px',
-                position: 'sticky',
-                top: '80px',
-                marginLeft: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                height: 'calc(100vh - 100px)',
-            }}>
-                {/* Pill Tab Buttons */}
-                <div style={{
-                    display: 'flex',
-                    gap: '4px',
-                    marginBottom: '10px',
-                    background: 'var(--bg-card-hover)',
-                    borderRadius: '10px',
-                    padding: '3px',
-                }}>
-                    {[{key: 'chat', icon: '🧠', label: 'Chat'}, {key: 'search', icon: '🔍', label: 'Search'}].map(tab => (
-                        <button
-                            key={tab.key}
-                            onClick={() => setSidebarTab(tab.key)}
-                            style={{
-                                flex: 1,
-                                padding: '7px 0',
-                                borderRadius: '8px',
-                                border: 'none',
-                                fontSize: '12px',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                background: sidebarTab === tab.key
-                                    ? 'linear-gradient(135deg, #7c3aed, #6d28d9)'
-                                    : 'transparent',
-                                color: sidebarTab === tab.key
-                                    ? '#fff'
-                                    : 'var(--text-muted)',
-                                boxShadow: sidebarTab === tab.key
-                                    ? '0 2px 8px rgba(124,58,237,0.3)'
-                                    : 'none',
-                            }}
-                        >
-                            {tab.icon} {tab.label}
-                        </button>
-                    ))}
+            <div style={{ width: 440, borderLeft: '1px solid var(--border)', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', padding: 16, gap: 8, background: '#fff', borderBottom: '1px solid var(--border)' }}>
+                    <button 
+                        onClick={() => setSidebarTab('chat')}
+                        style={{ flex: 1, padding: 10, borderRadius: 12, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, transition: '0.1s',
+                            ...(sidebarTab === 'chat' ? { background: 'var(--accent-light)', color: 'var(--accent)' } : { background: 'transparent', color: 'var(--text-muted)' })
+                        }}
+                    >
+                        <Brain size={18} strokeWidth={2} /> Chat
+                    </button>
+                    <button 
+                        onClick={() => setSidebarTab('search')}
+                        style={{ flex: 1, padding: 10, borderRadius: 12, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, transition: '0.1s',
+                            ...(sidebarTab === 'search' ? { background: 'var(--accent-light)', color: 'var(--accent)' } : { background: 'transparent', color: 'var(--text-muted)' })
+                        }}
+                    >
+                        <Search size={18} strokeWidth={2} /> Search
+                    </button>
                 </div>
-
-                {/* Tab Content */}
-                <div style={{ flex: 1, minHeight: 0 }}>
+                
+                <div style={{ flex: 1, overflowY: 'auto' }}>
                     {sidebarTab === 'chat' && (
                         <ChatPanel noteContext={{ id: note.id, title: note.title }} />
                     )}
