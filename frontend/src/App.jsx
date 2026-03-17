@@ -13,9 +13,11 @@ import RevisionPage from './pages/RevisionPage';
 import AIStorePage from './pages/AIStorePage';
 import api from './api';
 
+import { Database, BookOpen, Network, Search, MessageCircle, ShoppingBag } from 'lucide-react';
+import logo from './assets/logo.png';
+
 function Sidebar() {
     const { user, logout } = useAuth();
-    const [menuOpen, setMenuOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [dueCount, setDueCount] = useState(0);
 
@@ -27,96 +29,52 @@ function Sidebar() {
     }, [user]);
 
     const navItems = [
-        { to: "/", end: true, icon: "📚", label: "Vault" },
-        { to: "/revision", icon: "📖", label: "Revision", badge: dueCount },
-        { to: "/topics", icon: "🗺️", label: "Knowledge Graph" },
-        { to: "/search", icon: "🔍", label: "Search" },
-        { to: "/chat", icon: "💬", label: "Chat" },
+        { to: "/", end: true, icon: <Database size={18} strokeWidth={1.5} />, label: "Vault" },
+        { to: "/revision", icon: <BookOpen size={18} strokeWidth={1.5} />, label: "Revision" },
+        { to: "/topics", icon: <Network size={18} strokeWidth={1.5} />, label: "Knowledge Graph" },
+        { to: "/search", icon: <Search size={18} strokeWidth={1.5} />, label: "Search" },
+        { to: "/chat", icon: <MessageCircle size={18} strokeWidth={1.5} />, label: "Chat" },
     ];
 
     return (
-        <nav style={{ width: 220, background: "#fff", borderRight: "1px solid #E5E5EA", padding: "20px 0", position: "fixed", top: 0, left: 0, height: "100vh", display: "flex", flexDirection: "column", zIndex: 100, fontFamily: "Inter,sans-serif" }}>
-            <div style={{ padding: "0 20px 20px", borderBottom: "1px solid #E5E5EA", marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 20 }}>🧠</span>
-                    <div>
-                        <div style={{ fontWeight: 800, fontSize: 16, background: "linear-gradient(135deg,#7C3AED,#A855F7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>MindVault</div>
-                        <div style={{ fontSize: 10, color: "#A0A0B0", letterSpacing: 1, textTransform: "uppercase" }}>AI Second Brain</div>
-                    </div>
-                </div>
+        <nav className="sidebar">
+            <div style={{ padding: '24px' }}>
+                <img src={logo} alt="MindVault Logo" style={{ height: 42, display: 'block' }} />
             </div>
 
             <div style={{ padding: "0 10px", flex: 1 }}>
-                {navItems.map(({ to, end, icon, label, badge }) => (
+                {navItems.map(({ to, end, icon, label }) => (
                     <NavLink key={to} to={to} end={end}
-                        className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, marginBottom: 2, fontSize: 14, fontWeight: 500, textDecoration: "none", transition: "all 0.15s" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{icon}</span> {label}
-                        </div>
-                        {badge > 0 && (
-                            <span style={{ background: "#EF4444", color: "white", fontSize: 11, fontWeight: "bold", padding: "2px 6px", borderRadius: 10 }}>
-                                {badge}
+                        className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
+                        <span className="nav-link-icon">{icon}</span>
+                        {label}
+                        {label === "Revision" && dueCount > 0 && (
+                            <span style={{ fontSize: '10px', background: 'var(--accent)', color: 'white', padding: '1px 6px', borderRadius: '10px', marginLeft: 'auto' }}>
+                                {dueCount}
                             </span>
                         )}
                     </NavLink>
                 ))}
             </div>
 
-            {/* Coming Soon Banner & Divider */}
-            <div>
-                <NavLink to="/ai-store" style={{ textDecoration: 'none' }}>
-                    <div style={{
-                        margin: "0 10px 8px 10px",
-                        padding: "10px 14px",
-                        background: "linear-gradient(135deg, #F5F3FF, #FAF5FF)",
-                        border: "1px solid rgba(124,58,237,0.2)",
-                        borderRadius: 12,
-                        cursor: "pointer",
-                        position: "relative"
-                    }}>
-                        {/* Pulsing Dot */}
-                        <div style={{
-                            width: 8, height: 8, borderRadius: "50%", background: "#7C3AED",
-                            position: "absolute", top: 8, right: 8,
-                            animation: "pulse 2s infinite"
-                        }} />
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED" }}>AI Store</div>
-                        <div style={{ fontSize: 11, color: "#A78BFA", marginTop: 2 }}>Agents & tools for your brain</div>
-                        <style>
-                            {`@keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.4); } 100% { transform: scale(1); } }`}
-                        </style>
-                    </div>
+            <div style={{ padding: "0 10px", marginBottom: 12 }}>
+                <NavLink to="/ai-store"
+                    className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
+                    <span className="nav-link-icon"><ShoppingBag size={18} strokeWidth={1.5} /></span>
+                    AI Store
                 </NavLink>
-                <div style={{ margin: "10px 14px", borderTop: "1px solid #E5E5EA" }} />
             </div>
 
-            <div style={{ position: "relative" }}>
-                {menuOpen && (
-                    <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 10, right: 10, background: "#fff", border: "1px solid #E5E5EA", borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.10)", overflow: "hidden", zIndex: 200 }}>
-                        <div style={{ padding: "10px 14px", borderBottom: "1px solid #F0F0F5" }}>
-                            <p style={{ fontSize: 12, color: "#6B6B80", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.email}</p>
-                        </div>
-                        <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}
-                            style={{ width: "100%", padding: "11px 14px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#1A1A2E", textAlign: "left" }}>
-                            ⚙️ Settings
-                        </button>
-                        <button onClick={() => { logout(); setMenuOpen(false); }}
-                            style={{ width: "100%", padding: "11px 14px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#DC2626", textAlign: "left" }}>
-                            → Log out
-                        </button>
-                    </div>
-                )}
-                <button onClick={() => setMenuOpen(o => !o)}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "none", border: "none", borderTop: "1px solid #F0F0F5", cursor: "pointer" }}>
-                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1A1A2E", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+            <div style={{ borderTop: "1px solid var(--border)", padding: "12px 10px" }}>
+                <button onClick={() => setSettingsOpen(true)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: "0.875rem", flexShrink: 0 }}>
                         {user?.username?.[0]?.toUpperCase() || "U"}
                     </div>
-                    <div style={{ flex: 1, textAlign: "left", minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, fontSize: 13, color: "#1A1A2E", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.username}</p>
-                        <p style={{ fontSize: 11, color: "#A0A0B0" }}>@{user?.username}</p>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 500, fontSize: "0.875rem", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: 0, lineHeight: 1.2 }}>{user?.username || "User"}</p>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: 0, marginTop: 4, lineHeight: 1 }}>{user?.email || "user@example.com"}</p>
                     </div>
-                    <span style={{ color: "#A0A0B0", fontSize: 12 }}>⇕</span>
                 </button>
                 {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
             </div>

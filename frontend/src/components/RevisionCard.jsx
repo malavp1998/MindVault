@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { Eye, Frown, Meh, Smile, Sun } from 'lucide-react';
 
 const RevisionCard = ({ note, total, currentIdx, onRate, onSkip, rateResult }) => {
     const [revealed, setRevealed] = useState(false);
@@ -7,9 +8,9 @@ const RevisionCard = ({ note, total, currentIdx, onRate, onSkip, rateResult }) =
     const [ratingVal, setRatingVal] = useState(null);
 
     const getRetentionColor = (pct) => {
-        if (pct >= 0.70) return 'bg-green-500';
-        if (pct >= 0.40) return 'bg-orange-500';
-        return 'bg-red-500';
+        if (pct >= 0.70) return '#10B981'; // green
+        if (pct >= 0.40) return '#F59E0B'; // orange
+        return '#EF4444'; // red
     };
 
     const retentionPct = Math.round(note.estimated_retention * 100);
@@ -23,163 +24,155 @@ const RevisionCard = ({ note, total, currentIdx, onRate, onSkip, rateResult }) =
 
     return (
         <div style={{
-            background: 'var(--bg-card)',
+            background: 'var(--card-bg)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            padding: 32,
-            boxShadow: 'var(--shadow-lg)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            borderRadius: 16,
+            padding: 40,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
             minHeight: '400px',
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            overflow: 'hidden'
+            width: '100%',
+            fontFamily: 'var(--font)'
         }}>
             {/* Top Meta */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-                <div style={{ flex: 1, paddingRight: 24 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-light)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8, display: 'block' }}>
-                        Note {currentIdx + 1} of {total}
-                    </span>
-                    <h3 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4, lineHeight: 1.3, letterSpacing: '-0.5px' }}>
-                        {note.title}
-                    </h3>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 16 }}>
-                        {Array.from(new Set([...(note.user_tags || []), ...(note.auto_tags || [])])).slice(0, 5).map(t => (
-                            <span key={t} className="tag" style={{ border: '1px solid rgba(139, 92, 246, 0.2)' }}>
-                                #{t}
-                            </span>
-                        ))}
-                    </div>
-                </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                    Revision {currentIdx + 1} of {total}
+                </span>
 
                 {/* Retention Badge */}
                 <div style={{
-                    display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-primary)',
-                    border: '1px solid var(--border)', padding: '6px 14px', borderRadius: 24, flexShrink: 0
-                }} title={`Estimated memory retention: ${retentionPct}%`}>
-                    <div className={retentionColor} style={{ width: 8, height: 8, borderRadius: '50%' }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        {retentionPct}%
+                    display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg)',
+                    border: '1px solid var(--border)', padding: '6px 14px', borderRadius: 24
+                }}>
+                    <div style={{ background: retentionColor, width: 6, height: 6, borderRadius: '50%' }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-dark)' }}>
+                        {retentionPct}% Retention
                     </span>
                 </div>
             </div>
 
+            <h3 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-dark)', margin: '0 0 32px 0' }}>
+                {note.title}
+            </h3>
+
             {!revealed && (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginTop: 40, marginBottom: 20 }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '48px 0' }}>
                     <button
                         onClick={() => setRevealed(true)}
                         style={{
-                            background: 'var(--gradient-primary)',
+                            background: 'var(--accent)',
                             color: 'white',
                             border: 'none',
                             padding: '12px 28px',
-                            borderRadius: 'var(--radius)',
+                            borderRadius: 24,
                             fontWeight: 600,
                             fontSize: 15,
                             display: 'flex',
                             alignItems: 'center',
                             gap: 10,
                             cursor: 'pointer',
-                            boxShadow: '0 4px 16px rgba(124, 58, 237, 0.3)',
-                            transition: 'all 0.2s ease',
+                            transition: 'opacity 0.2sease',
                         }}
-                        onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(124, 58, 237, 0.4)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(124, 58, 237, 0.3)'; }}
+                        onMouseOver={(e) => e.currentTarget.style.opacity = 0.9}
+                        onMouseOut={(e) => e.currentTarget.style.opacity = 1}
                     >
-                        <span style={{ fontSize: 18 }}>👁️</span>
+                        <Eye size={18} strokeWidth={2} />
                         Reveal Summary
                     </button>
-                    <p style={{ marginTop: 16, color: 'var(--text-muted)', fontSize: 13, fontWeight: 500 }}>Try to recall the contents before revealing.</p>
+                    <p style={{ marginTop: 20, color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>
+                        Think back to what this note was about.
+                    </p>
                 </div>
             )}
 
             {revealed && (
-                <div style={{ marginTop: 20, paddingTop: 24, borderTop: '1px solid var(--border)', flex: 1, display: 'flex', flexDirection: 'column', animation: 'fadeInUp 0.4s ease' }}>
-                    <div style={{ marginBottom: 32 }}>
-                        <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 12 }}>AI Insight</h4>
-                        <div className="rag-answer" style={{ marginBottom: 0, padding: 20 }}>
-                            <div className="rag-answer-text">
-                                <ReactMarkdown>{note.summary || "No summary available for this note."}</ReactMarkdown>
-                            </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.3s ease' }}>
+                    <div style={{ marginBottom: 40, background: 'var(--bg)', borderRadius: 16, padding: '32px 32px' }}>
+                        <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16, margin: 0 }}>
+                            Summary Insight
+                        </h4>
+                        <div style={{ 
+                            fontSize: 14, 
+                            lineHeight: 1.6, 
+                            color: 'var(--text-dark)',
+                            marginTop: 16
+                        }}>
+                            <ReactMarkdown>{note.summary || "No summary available for this note."}</ReactMarkdown>
                         </div>
                     </div>
 
-                    <div style={{ mt: 'auto' }}>
+                    <div style={{ marginTop: 'auto' }}>
                         {!rated ? (
-                            <div style={{ animation: 'fadeInUp 0.4s ease', background: 'var(--bg-card)' }}>
-                                <p style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 20, fontSize: 15 }}>
-                                    How easily did you recall this?
+                            <div style={{ animation: 'fadeIn 0.3s ease' }}>
+                                <p style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-dark)', marginBottom: 24, fontSize: 16 }}>
+                                    How was the recall?
                                 </p>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, maxWidth: 640, margin: '0 auto' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, maxWidth: 500, margin: '0 auto' }}>
                                     {[
-                                        { id: 'forgot', icon: '😰', label: 'Forgot', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)' },
-                                        { id: 'hard', icon: '😐', label: 'Hard', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)' },
-                                        { id: 'good', icon: '🙂', label: 'Good', color: '#10b981', bg: 'rgba(16, 185, 129, 0.08)' },
-                                        { id: 'easy', icon: '😎', label: 'Easy', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.08)' }
+                                        { id: 'forgot', icon: <Frown size={28} strokeWidth={1.5} />, label: 'Forgot', color: '#EF4444' },
+                                        { id: 'hard', icon: <Meh size={28} strokeWidth={1.5} />, label: 'Hard', color: '#F59E0B' },
+                                        { id: 'good', icon: <Smile size={28} strokeWidth={1.5} />, label: 'Good', color: '#10B981' },
+                                        { id: 'easy', icon: <Sun size={28} strokeWidth={1.5} />, label: 'Easy', color: '#EC4899' }
                                     ].map(btn => (
                                         <button
                                             key={btn.id}
                                             onClick={() => handleRateClick(btn.id)}
                                             style={{
                                                 padding: '20px 10px',
-                                                borderRadius: 'var(--radius)',
+                                                borderRadius: 16,
                                                 border: `1px solid ${btn.color}40`,
-                                                background: 'var(--bg-secondary)',
+                                                background: 'transparent',
                                                 cursor: 'pointer',
                                                 transition: 'all 0.2s ease',
                                                 display: 'flex',
                                                 flexDirection: 'column',
                                                 alignItems: 'center',
-                                                gap: 8
+                                                gap: 12,
+                                                color: btn.color
                                             }}
-                                            onMouseOver={(e) => { e.currentTarget.style.background = btn.bg; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = btn.color; }}
-                                            onMouseOut={(e) => { e.currentTarget.style.background = 'var(--bg-secondary)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = `${btn.color}40`; }}
+                                            onMouseOver={(e) => { e.currentTarget.style.background = `${btn.color}10`; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
                                         >
-                                            <div style={{ fontSize: 32 }}>{btn.icon}</div>
-                                            <div style={{ fontWeight: 700, color: btn.color, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{btn.label}</div>
+                                            <div>{btn.icon}</div>
+                                            <div style={{ fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>{btn.label}</div>
                                         </button>
                                     ))}
                                 </div>
 
-                                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+                                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
                                     <button
                                         onClick={() => onSkip(note.id)}
                                         style={{
-                                            background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
-                                            cursor: 'pointer', padding: '8px 16px', borderRadius: 8, transition: 'all 0.2s'
+                                            background: 'none', border: 'none', fontSize: 13, fontWeight: 500, color: 'var(--text-muted)',
+                                            cursor: 'pointer', textDecoration: 'underline'
                                         }}
-                                        onMouseOver={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-primary)'; }}
-                                        onMouseOut={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                        onMouseOver={(e) => { e.currentTarget.style.color = 'var(--text-dark)'; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
                                     >
-                                        Skip for now
+                                        Skip this for now
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            <div style={{ textAlign: 'center', padding: '30px 0', animation: 'fadeInUp 0.3s ease' }}>
-                                <div style={{ fontSize: 48, marginBottom: 16 }}>
-                                    {ratingVal === 'forgot' && '😰'}
-                                    {ratingVal === 'hard' && '😐'}
-                                    {ratingVal === 'good' && '🙂'}
-                                    {ratingVal === 'easy' && '😎'}
+                            <div style={{ textAlign: 'center', padding: '40px 0', animation: 'fadeIn 0.3s ease' }}>
+                                <div style={{ color: 'var(--text-dark)' }}>
+                                    {ratingVal === 'forgot' && <Frown size={48} strokeWidth={1.5} color="#EF4444" />}
+                                    {ratingVal === 'hard' && <Meh size={48} strokeWidth={1.5} color="#F59E0B" />}
+                                    {ratingVal === 'good' && <Smile size={48} strokeWidth={1.5} color="#10B981" />}
+                                    {ratingVal === 'easy' && <Sun size={48} strokeWidth={1.5} color="#EC4899" />}
                                 </div>
 
                                 {rateResult ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                        <p style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-primary)' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                                        <p style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-dark)', margin: 0 }}>
                                             {rateResult.message}
                                         </p>
-                                        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                                        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
                                             Next review in {rateResult.new_interval} days
                                         </p>
-                                        {rateResult.is_mastered && (
-                                            <div style={{ marginTop: 8 }}>
-                                                <span style={{ display: 'inline-block', padding: '4px 12px', background: 'rgba(245, 158, 11, 0.15)', color: '#d97706', borderRadius: 20, fontWeight: 700, fontSize: 13 }}>
-                                                    🏆 Mastered!
-                                                </span>
-                                            </div>
-                                        )}
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>

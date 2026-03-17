@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import RevisionCard from '../components/RevisionCard';
-import RevisionProgress from '../components/RevisionProgress';
 import RevisionComplete from '../components/RevisionComplete';
+import { BookOpen } from 'lucide-react';
 
 const RevisionSkeleton = () => (
     <div className="animate-pulse max-w-3xl mx-auto w-full mt-4">
@@ -150,13 +150,16 @@ export default function RevisionPage() {
                 )}
 
                 {!loading && !allCaughtUp && !isComplete && notes.length > 0 && (
-                    <div className="animate-fade-in">
-                        <RevisionProgress
-                            streak={streak}
-                            current={currentIndex + 1}
-                            total={notes.length}
-                            ratings={ratings}
-                        />
+                    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 32 }}>
+                            <div style={{ background: 'var(--accent-light)', color: 'var(--accent)', padding: 8, borderRadius: 12, display: 'flex' }}>
+                                <BookOpen size={24} strokeWidth={2} />
+                            </div>
+                            <h1 style={{ fontSize: '2rem', color: 'var(--text-dark)', margin: 0 }}>
+                                <span className="page-header-serif" style={{ fontSize: 'inherit' }}>daily</span>
+                                <span className="page-header-title" style={{ fontSize: 'inherit', fontWeight: 700 }}> revision</span>
+                            </h1>
+                        </div>
                         <RevisionCard
                             key={notes[currentIndex].id} // force re-render on new note
                             note={notes[currentIndex]}

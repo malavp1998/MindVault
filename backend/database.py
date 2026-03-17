@@ -48,6 +48,8 @@ async def init_db():
         # Add graph coordinate columns if they don't exist (for existing DBs)
         await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_x FLOAT"))
         await conn.execute(text("ALTER TABLE notes ADD COLUMN IF NOT EXISTS graph_y FLOAT"))
+        # Chat Session Columns
+        await conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE NOT NULL"))
         # Full-text search index for hybrid search (BM25)
         await conn.execute(text("""
             ALTER TABLE notes

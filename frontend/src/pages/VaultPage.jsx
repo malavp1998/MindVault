@@ -4,6 +4,7 @@ import Masonry from 'react-masonry-css';
 import { listNotes, listTopics, deleteNote, createNote, createAudioNote } from '../api';
 import ReactMarkdown from 'react-markdown';
 import RichTextEditor from '../components/RichTextEditor';
+import { Plus, ChevronDown, SlidersHorizontal, Brain, Globe } from 'lucide-react';
 
 export default function VaultPage() {
     const [notes, setNotes] = useState([]);
@@ -14,6 +15,7 @@ export default function VaultPage() {
     const [sortBy, setSortBy] = useState('newest');
     const [viewDensity, setViewDensity] = useState('comfortable');
     const [groupBy, setGroupBy] = useState(null);
+    const [activeTab, setActiveTab] = useState('All Notes');
     const [cardPrefs, setCardPrefs] = useState({
         showSummary: true,
         showAutoTags: true,
@@ -24,6 +26,8 @@ export default function VaultPage() {
     });
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const filtersRef = useRef(null);
+    const [isSortOpen, setIsSortOpen] = useState(false);
+    const sortRef = useRef(null);
     const [loading, setLoading] = useState(true);
     const [isCreatingNote, setIsCreatingNote] = useState(false);
     const [newNoteTitle, setNewNoteTitle] = useState('');
@@ -46,6 +50,9 @@ export default function VaultPage() {
             if (filtersRef.current && !filtersRef.current.contains(event.target)) {
                 // If clicking outside the filter panel, close it
                 setIsFiltersOpen(false);
+            }
+            if (sortRef.current && !sortRef.current.contains(event.target)) {
+                setIsSortOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -231,6 +238,17 @@ export default function VaultPage() {
     // ─── DERIVED STATE & FILTERING ───
 
     let filteredNotes = notes.filter(note => {
+        if (activeTab === 'Starred') return note.is_starred;
+        if (activeTab === 'Archived') return note.is_archived;
+        if (activeTab === 'Recent') {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            return new Date(note.created_at) > oneWeekAgo;
+        }
+        if (activeTab === 'All Notes') {
+            if (note.is_archived) return false;
+        }
+
         // Topics (OR within, AND between)
         const matchTopic = selectedTopics.length === 0 || selectedTopics.includes(note.topic_id);
         
@@ -353,87 +371,67 @@ export default function VaultPage() {
     }
 
     return (
-        <div>
-            <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '24px 40px' }}>
+            <div className="page-header">
                 <div>
-                    <h1>📚 Your Vault</h1>
-                    <p>{notes.length} notes saved • {topics.length} topics discovered</p>
+                    <span className="page-header-serif">your</span>
+                    <span className="page-header-title"> vault</span>
                 </div>
                 <button
                     onClick={() => setIsCreatingNote(!isCreatingNote)}
                     style={{
-                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+                        background: isCreatingNote ? 'rgba(239, 68, 68, 0.1)' : 'var(--accent)',
                         color: isCreatingNote ? '#ef4444' : '#fff',
                         border: isCreatingNote ? '1px solid rgba(239, 68, 68, 0.3)' : 'none',
-                        padding: '10px 18px',
-                        borderRadius: 10,
-                        fontWeight: 600,
-                        fontSize: 14,
-                        boxShadow: isCreatingNote ? 'none' : '0 4px 12px rgba(139, 92, 246, 0.25)',
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        fontWeight: 500,
+                        fontSize: '0.875rem',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
+                        gap: 6,
                         transition: 'all 0.2s ease',
                         whiteSpace: 'nowrap',
                         flexShrink: 0,
                     }}
-                    onMouseOver={(e) => {
-                        if (!isCreatingNote) {
-                            e.currentTarget.style.opacity = '0.9';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.35)';
-                        }
-                    }}
-                    onMouseOut={(e) => {
-                        if (!isCreatingNote) {
-                            e.currentTarget.style.opacity = '1';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.25)';
-                        }
-                    }}
                 >
-                    {isCreatingNote ? "✕ Cancel" : "✨ Create New Note"}
+                    {isCreatingNote ? "✕ Cancel" : <><Plus size={16} /> Create New Note</>}
                 </button>
             </div>
 
             {/* Redesigned Filter & Search Bar */}
-            <div style={{ display: 'flex', gap: 16, marginBottom: 24, alignItems: 'center', position: 'relative' }}>
+            <div className="tabs-container">
+                <div className="tabs-list">
+                    {['All Notes', 'Recent', 'Starred', 'Archived'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
                 
-                {/* Left: Filters Button */}
-                <div ref={filtersRef} style={{ position: 'relative' }}>
-                    <button
-                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-                        style={{
-                            padding: '0 16px',
-                            height: 36,
-                            borderRadius: 18,
-                            border: `1px solid ${isFiltersOpen || activeFilterCount > 0 ? 'var(--accent)' : 'var(--border-color)'}`,
-                            background: isFiltersOpen || activeFilterCount > 0 ? 'rgba(139, 92, 246, 0.1)' : 'var(--bg-secondary)',
-                            color: isFiltersOpen || activeFilterCount > 0 ? 'var(--accent)' : 'var(--text-primary)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            fontSize: 14,
-                            fontWeight: 500,
-                            transition: 'all 0.2s ease',
-                            flexShrink: 0
-                        }}
-                    >
-                        ⚙ Filters {activeFilterCount > 0 && <span style={{ background: 'var(--accent)', color: '#fff', padding: '2px 6px', borderRadius: 10, fontSize: 12, lineHeight: 1 }}>{activeFilterCount}</span>}
-                        <span style={{ fontSize: 10, transform: isFiltersOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
-                    </button>
+                <div className="filter-actions">
+                    {/* Filters Dropdown */}
+                    <div ref={filtersRef} style={{ position: 'relative' }}>
+                        <div 
+                            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                            className={`filter-trigger ${(selectedTopics.length > 0 || selectedLanguages.length > 0 || activeFilterCount > 0) ? 'active' : ''}`}>
+                            <SlidersHorizontal size={14} /> Filter {(selectedTopics.length + selectedLanguages.length + (sortBy !== 'newest' ? 1 : 0) + (groupBy ? 1 : 0) + (viewDensity !== 'comfortable' ? 1 : 0)) > 0 && `(${(selectedTopics.length + selectedLanguages.length + (sortBy !== 'newest' ? 1 : 0) + (groupBy ? 1 : 0) + (viewDensity !== 'comfortable' ? 1 : 0))})`}
+                        </div>
 
                     {/* Filter Dropdown Panel */}
                     {isFiltersOpen && (
                         <div style={{
                             position: 'absolute',
                             top: 'calc(100% + 8px)',
-                            left: 0,
+                            right: 0,
                             width: 320,
-                            background: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-color)',
+                            background: '#ffffff',
+                            border: '1px solid var(--border)',
                             borderRadius: 12,
                             boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
                             zIndex: 100,
@@ -475,7 +473,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Languages Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                     <h4 style={{ margin: 0, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Language</h4>
                                     <button 
@@ -505,7 +503,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Sort By Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Sort By</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -532,7 +530,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* View Density Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>View Density</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -555,7 +553,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Group By Section */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Group By</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -580,7 +578,7 @@ export default function VaultPage() {
                             </div>
 
                             {/* Show/Hide Toggles */}
-                            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 16 }}>
+                            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
                                 <h4 style={{ margin: 0, marginBottom: 8, fontSize: 12, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Show / Hide</h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {[
@@ -609,7 +607,7 @@ export default function VaultPage() {
                                 style={{
                                     marginTop: 8,
                                     padding: '10px 0',
-                                    background: 'var(--gradient-primary, linear-gradient(135deg, #6366F1, #8B5CF6))',
+                                    background: 'var(--accent)',
                                     color: '#fff',
                                     border: 'none',
                                     borderRadius: 8,
@@ -623,111 +621,50 @@ export default function VaultPage() {
                     )}
                 </div>
 
-                {/* Middle: Active Filter Chips */}
-                <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-                    {selectedTopics.slice(0, 5).map(topicId => {
-                        const t = topics.find(tp => tp.id === topicId);
-                        return t ? (
-                            <span key={`t-${topicId}`} className="active-filter-chip">
-                                🗺 {t.name} <button onClick={() => removeFilter('topic', topicId)}>✕</button>
-                            </span>
-                        ) : null;
-                    })}
-                    {selectedLanguages.slice(0, 5).map(code => {
-                        const l = ALL_LANGUAGES.find(lang => lang.code === code);
-                        return l ? (
-                            <span key={`l-${code}`} className="active-filter-chip">
-                                🌐 {l.label.split(' ')[0]} <button onClick={() => removeFilter('language', code)}>✕</button>
-                            </span>
-                        ) : null;
-                    })}
-                    {sortBy !== 'newest' && (
-                        <span className="active-filter-chip">
-                            ⇅ {sortBy === 'oldest' ? 'Oldest First' : sortBy === 'updated' ? 'Recently Updated' : sortBy === 'viewed' ? 'Most Viewed' : sortBy === 'connected' ? 'Most Connected' : sortBy === 'longest' ? 'Longest Note' : 'Most Tagged'}
-                            <button onClick={() => setSortBy('newest')}>✕</button>
-                        </span>
-                    )}
-                    {groupBy && (
-                        <span className="active-filter-chip">
-                            🗂 {groupBy === 'topic' ? 'By Topic' : groupBy === 'language' ? 'By Language' : groupBy === 'week' ? 'By Week' : 'By AI Confidence'}
-                            <button onClick={() => setGroupBy(null)}>✕</button>
-                        </span>
-                    )}
-                    {viewDensity !== 'comfortable' && (
-                        <span className="active-filter-chip">
-                            👁 {viewDensity === 'compact' ? 'Compact View' : 'List View'}
-                            <button onClick={() => setViewDensity('comfortable')}>✕</button>
-                        </span>
-                    )}
-                    
-                    {activeFilterCount > 5 && (
-                        <span className="active-filter-chip" onClick={() => setIsFiltersOpen(true)} style={{ cursor: 'pointer' }}>
-                            +{activeFilterCount - 5} more
-                        </span>
-                    )}
-
-                    {activeFilterCount > 0 && (
-                        <button 
-                            type="button" 
-                            onClick={clearAllFilters}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 8 }}
-                        >
-                            Clear All
-                        </button>
+                {/* Sort Dropdown */}
+                <div ref={sortRef} style={{ position: 'relative' }}>
+                    <div 
+                        onClick={() => setIsSortOpen(!isSortOpen)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dark)', fontSize: '0.875rem', cursor: 'pointer', padding: '12px 0' }}>
+                        {sortBy === 'newest' ? 'Newest First' : sortBy === 'oldest' ? 'Oldest First' : sortBy === 'updated' ? 'Recently Updated' : sortBy === 'viewed' ? 'Most Viewed' : sortBy === 'connected' ? 'Most Connected' : sortBy === 'longest' ? 'Longest Note' : 'Most Tagged'} <ChevronDown size={14} />
+                    </div>
+                    {isSortOpen && (
+                        <div style={{
+                            position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#fff', border: '1px solid var(--border)',
+                            borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, minWidth: 180, overflow: 'hidden'
+                        }}>
+                            {[
+                                { id: 'newest', label: 'Newest First' },
+                                { id: 'oldest', label: 'Oldest First' },
+                                { id: 'updated', label: 'Most Recently Updated' },
+                                { id: 'viewed', label: 'Most Viewed' },
+                                { id: 'connected', label: 'Most Connected' },
+                                { id: 'longest', label: 'Longest Note' },
+                                { id: 'tagged', label: 'Most Tagged' }
+                            ].map(opt => (
+                                <button 
+                                    key={opt.id}
+                                    onClick={() => { setSortBy(opt.id); setIsSortOpen(false); }}
+                                    style={{
+                                        width: '100%', padding: '10px 16px', textAlign: 'left', background: sortBy === opt.id ? 'var(--bg)' : 'none',
+                                        border: 'none', fontSize: '0.875rem', cursor: 'pointer', color: sortBy === opt.id ? 'var(--accent)' : 'var(--text-dark)',
+                                        fontWeight: sortBy === opt.id ? 500 : 400
+                                    }}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
                     )}
                 </div>
-
-                {/* Right: Keyword Search Bar */}
-                <div style={{ position: 'relative', width: 240, flexShrink: 0 }}>
-                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-muted)' }}>🔍</span>
-                    <input
-                        type="text"
-                        placeholder="Search memories..."
-                        value={keywordSearch}
-                        onChange={(e) => setKeywordSearch(e.target.value)}
-                        style={{
-                            width: '100%',
-                            height: 36,
-                            padding: '0 32px 0 36px',
-                            borderRadius: 18,
-                            border: `1px solid ${keywordSearch ? 'var(--accent)' : 'var(--border-color)'}`,
-                            background: 'var(--bg-secondary)',
-                            color: 'var(--text-primary)',
-                            fontSize: 14,
-                            outline: 'none',
-                            transition: 'all 0.2s ease',
-                        }}
-                    />
-                    {keywordSearch && (
-                        <button
-                            onClick={() => setKeywordSearch('')}
-                            style={{
-                                position: 'absolute',
-                                right: 8,
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--text-muted)',
-                                cursor: 'pointer',
-                                fontSize: 12,
-                                padding: 4,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}
-                        >
-                            ✕
-                        </button>
-                    )}
-                </div>
+            </div>
             </div>
 
             {/* Create Note Inline Form */}
             {isCreatingNote && (
                 <div style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
+                    background: '#ffffff',
+                    border: '1px solid var(--border)',
                     borderRadius: 16,
                     padding: 20,
                     marginBottom: 24,
@@ -743,7 +680,7 @@ export default function VaultPage() {
                             width: '100%',
                             background: 'transparent',
                             border: 'none',
-                            borderBottom: '1px solid var(--border-color)',
+                            borderBottom: '1px solid var(--border)',
                             fontSize: 18,
                             fontWeight: 600,
                             color: 'var(--text-primary)',
@@ -810,7 +747,7 @@ export default function VaultPage() {
                                     style={{
                                         background: 'transparent',
                                         color: 'var(--text-primary)',
-                                        border: '1px solid var(--border-color)',
+                                        border: '1px solid var(--border)',
                                         padding: '10px 20px',
                                         borderRadius: 10,
                                         fontWeight: 600,
@@ -832,10 +769,10 @@ export default function VaultPage() {
                                 disabled={isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === ''))}
                                 style={{
                                     background: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === ''))
-                                        ? 'var(--bg-secondary)'
+                                        ? '#f0eeeb'
                                         : 'linear-gradient(135deg, #10B981, #059669)',
                                     color: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? 'var(--text-muted)' : '#fff',
-                                    border: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? '1px solid var(--border-color)' : 'none',
+                                    border: isSaving || (!newNoteTitle.trim() && (!newNoteContent || newNoteContent === '<p></p>' || newNoteContent.trim() === '')) ? '1px solid var(--border)' : 'none',
                                     padding: '10px 24px',
                                     borderRadius: 10,
                                     fontWeight: 600,
@@ -877,7 +814,7 @@ export default function VaultPage() {
                         {notes.length > 0 && (
                             <button 
                                 onClick={() => { clearAllFilters(); setKeywordSearch(''); }}
-                                style={{ marginTop: 16, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}
+                                style={{ marginTop: 16, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer' }}
                             >
                                 Clear All Filters
                             </button>
@@ -891,7 +828,7 @@ export default function VaultPage() {
                                     <h3 style={{ 
                                         margin: '0 0 16px 0', 
                                         paddingBottom: 8, 
-                                        borderBottom: '1px solid var(--border-color)',
+                                        borderBottom: '1px solid var(--border)',
                                         color: 'var(--text-primary)',
                                         fontSize: 16,
                                         display: 'flex',
@@ -911,108 +848,81 @@ export default function VaultPage() {
                                             key={note.id}
                                             className="card"
                                             onClick={() => navigate(`/note/${note.id}`)}
-                                            style={{ 
-                                                animationDelay: `${Math.random() * 0.2}s`, 
-                                                animation: 'fadeInUp 0.4s ease both',
-                                                padding: viewDensity === 'compact' ? '12px 16px' : '20px',
-                                                gap: viewDensity === 'compact' ? 8 : 12,
-                                                display: viewDensity === 'list' ? 'flex' : 'flex',
-                                                flexDirection: viewDensity === 'list' ? 'row' : 'column',
-                                                alignItems: viewDensity === 'list' ? 'center' : 'stretch',
-                                                justifyContent: viewDensity === 'list' ? 'space-between' : 'flex-start'
-                                            }}
                                         >
-                                            <div style={{ flex: viewDensity === 'list' ? 1 : 'unset' }}>
-                                                <div className="card-title" style={{ fontSize: viewDensity === 'compact' ? 16 : 18, marginBottom: viewDensity === 'list' ? 4 : 8, paddingRight: 32 }}>
-                                                    {highlightText(note.title, keywordSearch)}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                                                    {note.topic_name && (
+                                                        <span className="note-topic-badge">
+                                                            {note.topic_name}
+                                                        </span>
+                                                    )}
+                                                    
+                                                    {cardPrefs.showLanguage && note.language && (
+                                                        <span className="note-language-badge">
+                                                            🌐 {note.language}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                
-                                                {cardPrefs.showSummary && note.summary && viewDensity !== 'list' && (
-                                                    <div className="card-summary" style={{ fontSize: viewDensity === 'compact' ? 13 : 14, marginBottom: viewDensity === 'compact' ? 8 : 12 }}>
+
+                                                <h3 className="card-title">
+                                                    {highlightText(note.title, keywordSearch) || 'Untitled Note'}
+                                                    {note.is_audio && ' 🎤'}
+                                                </h3>
+
+                                                {cardPrefs.showSummary && note.summary && (
+                                                    <div className="card-summary">
                                                         <ReactMarkdown>{note.summary}</ReactMarkdown>
                                                     </div>
                                                 )}
 
-                                                <div className="card-meta" style={{ marginTop: viewDensity === 'list' ? 0 : 'auto', fontSize: viewDensity === 'compact' ? 11 : 12 }}>
-                                                    <span>{new Date(note.created_at).toLocaleDateString()}</span>
-                                                    {cardPrefs.showWordCount && note.content && <span> • {note.content.split(/\s+/).length} words</span>}
-                                                    {cardPrefs.showBacklinkCount && <span> • {note.backlink_count || 0} links</span>}
-                                                    <div style={{ display: viewDensity === 'list' ? 'inline-flex' : 'flex', marginLeft: viewDensity === 'list' ? 12 : 0 }}>
-                                                        {!note.is_processed && <span className="processing-badge">Processing</span>}
-                                                        {note.topic_name && <span className="tag">{note.topic_name}</span>}
-                                                        {cardPrefs.showLanguage && note.language && note.language !== 'en' && <span className="tag">🇮🇳 {note.language.toUpperCase()}</span>}
-                                                        {cardPrefs.showLanguage && note.language === 'en' && <span className="tag">🇬🇧 EN</span>}
+                                                {/* Auto Tags */}
+                                                {cardPrefs.showAutoTags && note.auto_tags && note.auto_tags.length > 0 && (
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                                        {note.auto_tags.slice(0, 3).map(tag => (
+                                                            <span key={tag} className="note-tag-chip">
+                                                                {highlightText(tag, keywordSearch)}
+                                                            </span>
+                                                        ))}
+                                                        {note.auto_tags.length > 3 && (
+                                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                                +{note.auto_tags.length - 3}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
 
-                                            {viewDensity !== 'list' && (
-                                                <>
-                                                    {cardPrefs.showAutoTags && Array.isArray(note.auto_tags) && note.auto_tags.length > 0 && (
-                                                        <div style={{ marginTop: viewDensity === 'compact' ? 6 : 10, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                                            {note.auto_tags.slice(0, 3).map(tag => (
-                                                                <span key={`auto-${tag}`} className="tag" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', borderColor: 'rgba(59, 130, 246, 0.3)' }}>
-                                                                    ✨ {highlightText(tag, keywordSearch)}
-                                                                </span>
-                                                            ))}
+                                            <div className="card-meta">
+                                                <span>{new Date(note.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                    {note.estimated_retention !== undefined && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }} title={`Memory Confidence: ${Math.round(note.estimated_retention * 100)}%`}>
+                                                            <Brain size={14} />
+                                                            <span className="note-retention-badge">
+                                                                Memory {Math.round(note.estimated_retention * 100)}%
+                                                            </span>
                                                         </div>
                                                     )}
-
-                                                    {Array.isArray(note.user_tags) && note.user_tags.length > 0 && (
-                                                        <div style={{ marginTop: viewDensity === 'compact' ? 4 : 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                                            {note.user_tags.map(tag => (
-                                                                <span key={`user-${tag}`} className="tag" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-                                                                    🏷️ {highlightText(tag, keywordSearch)}
-                                                                </span>
-                                                            ))}
-                                                        </div>
+                                                    {cardPrefs.showWordCount && note.content && (
+                                                        <span>
+                                                            {note.content.split(/\s+/).length} words
+                                                        </span>
                                                     )}
-
-                                                    {Array.isArray(note.tags) && note.tags.length > 0 && (!note.auto_tags || note.auto_tags.length === 0) && (!note.user_tags || note.user_tags.length === 0) && (
-                                                        <div style={{ marginTop: viewDensity === 'compact' ? 4 : 10, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                                                            {note.tags.slice(0, 3).map(tag => (
-                                                                <span key={tag} className="tag">{highlightText(tag, keywordSearch)}</span>
-                                                            ))}
-                                                        </div>
+                                                    {cardPrefs.showBacklinkCount && note.backlink_count > 0 && (
+                                                        <span style={{ color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, background: 'var(--accent-light)', padding: '2px 6px', borderRadius: 4 }}>
+                                                            🔗 {note.backlink_count}
+                                                        </span>
                                                     )}
+                                                </div>
 
-                                                    {note.estimated_retention !== undefined && note.estimated_retention !== null && viewDensity !== 'compact' && (
-                                                        <div style={{ marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 10 }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                                                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Memory Retention</span>
-                                                                <span style={{ fontSize: 12, fontWeight: 600, color: note.estimated_retention >= 0.70 ? '#10B981' : note.estimated_retention >= 0.40 ? '#F59E0B' : '#EF4444' }}>
-                                                                    {Math.round(note.estimated_retention * 100)}%
-                                                                </span>
-                                                            </div>
-                                                            <div style={{ height: 4, background: 'var(--bg-secondary)', borderRadius: 2, overflow: 'hidden' }}>
-                                                                <div style={{
-                                                                    height: '100%',
-                                                                    width: `${Math.round(note.estimated_retention * 100)}%`,
-                                                                    background: note.estimated_retention >= 0.70 ? '#10B981' : note.estimated_retention >= 0.40 ? '#F59E0B' : '#EF4444',
-                                                                    transition: 'width 0.5s ease'
-                                                                }} />
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            )}
-
-                                            <button
-                                                onClick={(e) => handleDelete(e, note.id)}
-                                                style={{
-                                                    position: 'absolute', top: 12, right: 12,
-                                                    background: 'rgba(239, 68, 68, 0.15)', border: 'none',
-                                                    color: '#ef4444', width: 28, height: 28, borderRadius: '50%',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    fontSize: 14, cursor: 'pointer', opacity: 0.6,
-                                                    transition: 'all 0.2s ease',
-                                                }}
-                                                onMouseOver={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'; }}
-                                                onMouseOut={(e) => { e.currentTarget.style.opacity = 0.6; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; }}
-                                                title="Delete note"
-                                            >
-                                                🗑️
-                                            </button>
+                                                <button
+                                                    onClick={(e) => handleDelete(e, note.id)}
+                                                    className="note-delete-btn"
+                                                    title="Delete note"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </Masonry>
