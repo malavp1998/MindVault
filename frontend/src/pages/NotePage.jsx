@@ -195,10 +195,7 @@ export default function NotePage() {
             <div className="note-detail-header">
                 <button
                     onClick={() => navigate(-1)}
-                    style={{
-                        background: 'none', border: 'none', color: 'var(--accent-light)',
-                        fontSize: 14, cursor: 'pointer', marginBottom: 16, display: 'block',
-                    }}
+                    className="back-link"
                 >
                     ← Back
                 </button>

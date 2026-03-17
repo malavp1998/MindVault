@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { searchNotes, submitVote } from '../api';
 import ReactMarkdown from 'react-markdown';
+import { Search, Sparkles, ArrowRight, AlertCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
 
 export default function SearchPage() {
     const [query, setQuery] = useState('');
@@ -13,8 +14,8 @@ export default function SearchPage() {
     const navigate = useNavigate();
 
     const handleVote = async (e, noteId, voteValue) => {
-        e.stopPropagation(); // prevent card click
-        if (votes[noteId]) return; // already voted
+        e.stopPropagation();
+        if (votes[noteId]) return;
         
         try {
             await submitVote(query, noteId, voteValue);
@@ -36,7 +37,7 @@ export default function SearchPage() {
         } catch (err) {
             console.error('Search failed:', err);
             const msg = err.code === 'ECONNABORTED'
-                ? 'Search timed out — the AI is under heavy load. Try again or uncheck the AI answer option.'
+                ? 'Search timed out — please try again.'
                 : err.response?.data?.detail || 'Search failed. Please try again.';
             setError(msg);
         } finally {
@@ -45,166 +46,165 @@ export default function SearchPage() {
     }, [query, synthesize]);
 
     return (
-        <div>
-            <div className="page-header">
-                <h1>🔍 Semantic Search</h1>
-                <p>Search your vault using natural language — powered by AI embeddings</p>
-            </div>
+        <div className="search-page">
+            {!results && !loading ? (
+                /* Hero Initial State */
+                <div className="search-hero">
+                    <div className="search-hero-title">
+                        <span className="page-header-serif">search</span> <span className="page-header-title">vault</span>
+                    </div>
+                    
+                    <form onSubmit={handleSearch} className="search-box-wrap">
+                        <input
+                            type="text"
+                            className="search-box-input"
+                            placeholder="Ask anything about your saved knowledge..."
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            autoFocus
+                        />
+                        <button type="submit" className="search-box-btn" disabled={loading || !query.trim()}>
+                            {loading ? <div className="spinner-sm" /> : <ArrowRight size={20} />}
+                        </button>
+                    </form>
 
-            {/* Search input */}
-            <form onSubmit={handleSearch}>
-                <div className="search-container">
-                    <span className="search-icon">🔍</span>
-                    <input
-                        type="text"
-                        className="search-input"
-                        placeholder="Ask anything about your saved knowledge..."
-                        value={query}
-                        onChange={e => setQuery(e.target.value)}
-                        autoFocus
-                    />
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                    <label className="search-ai-toggle">
                         <input
                             type="checkbox"
                             checked={synthesize}
                             onChange={e => setSynthesize(e.target.checked)}
-                            style={{ accentColor: 'var(--accent)' }}
                         />
-                        ✨ Generate AI answer (RAG)
+                        <Sparkles size={14} style={{ color: 'var(--accent)' }} />
+                        Generate AI answer
                     </label>
-                    <button
-                        type="submit"
-                        disabled={loading || !query.trim()}
-                        style={{
-                            padding: '10px 24px',
-                            background: 'var(--gradient-primary)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 8,
-                            fontSize: 14,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            opacity: loading || !query.trim() ? 0.5 : 1,
-                        }}
-                    >
-                        {loading ? '⏳ Searching...' : 'Search'}
-                    </button>
                 </div>
-            </form>
-
-            {/* Error */}
-            {error && (
-                <div className="card" style={{ borderLeft: '4px solid #ef4444', background: 'rgba(239,68,68,0.08)', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span>⚠️</span>
-                        <span style={{ color: '#ef4444', fontSize: 14 }}>{error}</span>
-                    </div>
-                </div>
-            )}
-
-            {/* RAG Answer */}
-            {results?.rag && (
-                <div className="rag-answer" style={{ animation: 'fadeInUp 0.4s ease' }}>
-                    <div className="rag-answer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <span>✨</span> AI-Synthesized Answer
+            ) : (
+                /* Results State */
+                <div style={{ paddingBottom: 60 }}>
+                    <div className="page-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 48 }}>
+                        <div className="search-hero-title" style={{ marginBottom: 24, transform: 'scale(0.8)' }}>
+                            <span className="page-header-serif">search</span> <span className="page-header-title">vault</span>
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 'normal', opacity: 0.7 }}>
-                            {['hi', 'ta', 'te', 'kn', 'bn', 'ml', 'gu', 'mr', 'pa', 'or'].includes(results.query_language)
-                                ? "Answered by Sarvam AI 🇮🇳"
-                                : "Answered by Groq 🇬🇧"}
-                        </div>
-                    </div>
-                    <div className="rag-answer-text">
-                        <ReactMarkdown>{results.rag.answer}</ReactMarkdown>
-                    </div>
-                </div>
-            )}
+                        
+                        <form onSubmit={handleSearch} className="search-box-wrap" style={{ maxWidth: 540 }}>
+                            <input
+                                type="text"
+                                className="search-box-input"
+                                placeholder="Ask anything about your saved knowledge..."
+                                value={query}
+                                onChange={e => setQuery(e.target.value)}
+                            />
+                            <button type="submit" className="search-box-btn" disabled={loading || !query.trim()}>
+                                {loading ? <div className="spinner-sm" style={{ borderColor: 'white', borderTopColor: 'transparent' }} /> : <ArrowRight size={20} />}
+                            </button>
+                        </form>
 
-            {/* Results */}
-            {results && (
-                <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 16 }}>
-                        {results.results.length} results found
-                    </h3>
+                        <label className="search-ai-toggle">
+                            <input
+                                type="checkbox"
+                                checked={synthesize}
+                                onChange={e => setSynthesize(e.target.checked)}
+                            />
+                            <Sparkles size={14} style={{ color: 'var(--accent)' }} />
+                            Generate AI answer
+                        </label>
+                    </div>
 
-                    {results.results.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="icon">🔍</div>
-                            <h3>No results found</h3>
-                            <p>Try a different query or save more notes to your vault.</p>
+                    {error && (
+                        <div className="alert alert-error" style={{ maxWidth: 600, margin: '0 auto 24px' }}>
+                            <AlertCircle size={18} />
+                            <span>{error}</span>
                         </div>
-                    ) : (
-                        results.results.map((result, i) => (
-                            <div
-                                key={result.note.id}
-                                className="card"
-                                onClick={() => navigate(`/note/${result.note.id}`)}
-                                style={{
-                                    marginBottom: 12,
-                                    animation: `fadeInUp ${0.3 + i * 0.05}s ease both`,
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div className="card-title">{result.note.title}</div>
+                    )}
+
+                    {/* RAG Answer */}
+                    {results?.rag && (
+                        <div className="rag-answer" style={{ maxWidth: 720, margin: '0 auto 48px' }}>
+                            <div className="rag-answer-header">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Sparkles size={16} /> AI-Synthesized Answer
+                                </div>
+                                <div style={{ fontSize: 11, fontWeight: 'normal', opacity: 0.6 }}>
+                                    {['hi', 'ta', 'te', 'kn', 'bn', 'ml', 'gu', 'mr', 'pa', 'or'].includes(results.query_language)
+                                        ? "Sarvam AI" : "Groq AI"}
+                                </div>
+                            </div>
+                            <div className="rag-answer-text">
+                                <ReactMarkdown>{results.rag.answer}</ReactMarkdown>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Search Results */}
+                    {results && (
+                        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
+                                <h3 style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                                    {results.results.length} results found
+                                </h3>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                {results.results.map((result, i) => (
+                                    <div
+                                        key={result.note.id}
+                                        className="note-card"
+                                        onClick={() => navigate(`/note/${result.note.id}`)}
+                                        style={{ 
+                                            display: 'flex', flexDirection: 'column', padding: 20, cursor: 'pointer',
+                                            animation: `fadeInUp ${0.3 + i * 0.05}s ease both`
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                                <span className="note-topic-badge">{result.note.topic_name || "Uncategorized"}</span>
+                                            </div>
+                                            <span className="note-meta-badge" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                                {(result.similarity * 100).toFixed(0)}% Match
+                                            </span>
+                                        </div>
+
+                                        <h2 className="note-card-title">{result.note.title}</h2>
+                                        
                                         {result.note.summary && (
-                                            <div className="card-summary">
+                                            <div className="note-summary-text" style={{ marginBottom: 16 }}>
                                                 <ReactMarkdown>{result.note.summary}</ReactMarkdown>
                                             </div>
                                         )}
-                                    </div>
-                                    <div style={{ marginLeft: 12, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-                                        <span className="similarity-badge" style={{ marginLeft: 0 }}>
-                                            {(result.similarity * 100).toFixed(0)}%
-                                        </span>
-                                        <div style={{ display: 'flex', gap: 4 }}>
-                                            <button 
-                                                onClick={(e) => handleVote(e, result.note.id, 1)}
-                                                style={{ 
-                                                    background: 'none', border: 'none', cursor: 'pointer', 
-                                                    opacity: votes[result.note.id] === undefined || votes[result.note.id] === 1 ? 1 : 0.3,
-                                                    filter: votes[result.note.id] === 1 ? 'drop-shadow(0 0 4px rgba(74,222,128,0.5))' : 'grayscale(1)',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                                title="Relevent result"
-                                            >👍</button>
-                                            <button 
-                                                onClick={(e) => handleVote(e, result.note.id, -1)}
-                                                style={{ 
-                                                    background: 'none', border: 'none', cursor: 'pointer',
-                                                    opacity: votes[result.note.id] === undefined || votes[result.note.id] === -1 ? 1 : 0.3,
-                                                    filter: votes[result.note.id] === -1 ? 'drop-shadow(0 0 4px rgba(248,113,113,0.5))' : 'grayscale(1)',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                                title="Not relevant"
-                                            >👎</button>
+
+                                        <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span className="note-date">
+                                                {new Date(result.note.created_at).toLocaleDateString()}
+                                            </span>
+                                            
+                                            <div style={{ display: 'flex', gap: 12 }}>
+                                                <button 
+                                                    onClick={(e) => handleVote(e, result.note.id, 1)}
+                                                    className="vote-btn"
+                                                    style={{ 
+                                                        color: votes[result.note.id] === 1 ? '#22c55e' : 'var(--text-muted)',
+                                                        opacity: votes[result.note.id] === undefined || votes[result.note.id] === 1 ? 1 : 0.3
+                                                    }}
+                                                >
+                                                    <ThumbsUp size={16} fill={votes[result.note.id] === 1 ? 'currentColor' : 'none'} />
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => handleVote(e, result.note.id, -1)}
+                                                    className="vote-btn"
+                                                    style={{ 
+                                                        color: votes[result.note.id] === -1 ? '#ef4444' : 'var(--text-muted)',
+                                                        opacity: votes[result.note.id] === undefined || votes[result.note.id] === -1 ? 1 : 0.3
+                                                    }}
+                                                >
+                                                    <ThumbsDown size={16} fill={votes[result.note.id] === -1 ? 'currentColor' : 'none'} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="card-meta">
-                                    <span>{new Date(result.note.created_at).toLocaleDateString()}</span>
-                                    <div>
-                                        {result.note.topic_name && <span className="tag">{result.note.topic_name}</span>}
-                                        {result.note.language && result.note.language !== 'en' && <span className="tag">🇮🇳 {result.note.language.toUpperCase()}</span>}
-                                        {result.note.source_url && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>🔗 Has source</span>}
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        ))
+                        </div>
                     )}
-                </div>
-            )}
-
-            {/* Initial state */}
-            {!results && !loading && (
-                <div className="empty-state">
-                    <div className="icon">🧠</div>
-                    <h3>Search your second brain</h3>
-                    <p>Type a question or topic to find semantically similar notes, with optional AI-powered answers.</p>
                 </div>
             )}
         </div>

@@ -28,10 +28,31 @@ export default function SettingsModal({ onClose }) {
     return (
         <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
             <div style={modal}>
-                <div style={{ width: 190, padding: 18, borderRight: "1px solid #F0F0F5", flexShrink: 0 }}>
-                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#A0A0B0", marginBottom: 18, display: "block" }}>✕</button>
+                <div style={{ width: 190, padding: 18, borderRight: "1px solid #F0F0F5", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#A0A0B0", marginBottom: 18, display: "block", textAlign: "left" }}>✕</button>
                     <button style={navBtn(tab === "general")} onClick={() => setTab("general")}>⚙️ General</button>
                     <button style={navBtn(tab === "api")} onClick={() => setTab("api")}>🔑 API</button>
+                    
+                    <div style={{ marginTop: "auto" }}>
+                        <button 
+                            onClick={async () => {
+                                try {
+                                    await auth.signOut();
+                                    onClose();
+                                } catch (err) {
+                                    console.error("Logout failed:", err);
+                                }
+                            }}
+                            style={{ 
+                                ...navBtn(false), 
+                                color: "#EF4444", 
+                                marginTop: 12,
+                                border: "1px solid rgba(239, 68, 68, 0.2)"
+                            }}
+                        >
+                            🚪 Sign Out
+                        </button>
+                    </div>
                 </div>
                 <div style={{ flex: 1, padding: 28, overflowY: "auto" }}>
                     {tab === "general" && <>
