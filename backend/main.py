@@ -104,6 +104,9 @@ app.include_router(agentic_chat_router)
 from routes.eval import router as eval_router
 app.include_router(eval_router)
 
+from routes.slack import router as slack_router
+app.include_router(slack_router, prefix="/slack", tags=["slack"])
+
 # MCP server direct route injection instead of mount to avoid /mcp/mcp duplication
 app.routes.extend(mcp_app.routes)
 
