@@ -34,6 +34,9 @@ class User(Base):
     phone_number: Mapped[Optional[str]] = mapped_column(
         VARCHAR(15), unique=True, nullable=True
     )
+    slack_user_id: Mapped[Optional[str]] = mapped_column(
+        VARCHAR(128), unique=True, nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

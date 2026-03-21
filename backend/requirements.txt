@@ -34,3 +34,5 @@ langchain-groq
 langchain-core
 
 beautifulsoup4
+slack-bolt>=1.18.1
+slack-sdk>=3.27.1
