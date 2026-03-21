@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_phone_number: str = ""
 
+    # Slack
+    slack_bot_token: str = ""
+    slack_signing_secret: str = ""
+
     # Auth Settings
     auth_method: str = "credentials"  # "credentials" or "otp"
     firebase_project_id: str = "mindvault-1"
