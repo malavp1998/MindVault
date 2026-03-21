@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 import asyncio
 import json
+import time
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,8 @@ from langsmith.run_helpers import get_current_run_tree
 from config import get_settings
 import urllib.parse
 import yt_dlp
+
+_last_retention_refresh: dict = {}
 
 settings = get_settings()
 
@@ -291,7 +294,11 @@ async def list_notes(
 ):
     """List all notes with optional filters — scoped to current user."""
     # Recalculate retention scores inline (replaces APScheduler cron on serverless)
-    await refresh_user_retention(db, current_user.id)
+    user_key = str(current_user.id)
+    now = time.time()
+    if now - _last_retention_refresh.get(user_key, 0) > 600:
+        await refresh_user_retention(db, current_user.id)
+        _last_retention_refresh[user_key] = now
 
     backlink_subquery = (
         select(func.count(NoteLink.id))
@@ -318,6 +325,16 @@ async def list_notes(
     result = await db.execute(query)
     rows = result.all()
 
+    # Fetch all topic names in ONE query
+    topic_ids = [n.topic_id for n, _, _, _ in rows if n.topic_id]
+    topic_map = {}
+    if topic_ids:
+        topic_result = await db.execute(
+            select(Topic).where(Topic.id.in_(topic_ids))
+        )
+        for t in topic_result.scalars().all():
+            topic_map[t.id] = t.name
+
     out = []
     for n, retention, review_count, backlinks in rows:
         item = NoteListOut(
@@ -329,7 +346,7 @@ async def list_notes(
             auto_tags=n.auto_tags,
             user_tags=n.user_tags,
             topic_id=n.topic_id,
-            topic_name=None,
+            topic_name=topic_map.get(n.topic_id) if n.topic_id else None,
             source_url=n.source_url,
             language=n.language,
             is_processed=n.is_processed,
@@ -340,10 +357,6 @@ async def list_notes(
             view_count=review_count or 0,
             estimated_retention=retention,
         )
-        if n.topic_id:
-            topic = await db.get(Topic, n.topic_id)
-            if topic:
-                item.topic_name = topic.name
         out.append(item)
 
     return out

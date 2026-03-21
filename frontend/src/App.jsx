@@ -23,9 +23,12 @@ function Sidebar() {
 
     useEffect(() => {
         if (!user) return;
-        api.get("/revision/stats")
-            .then(res => setDueCount(res.data.notes_due_today))
-            .catch(() => { });
+        const timer = setTimeout(() => {
+            api.get("/revision/stats")
+                .then(res => setDueCount(res.data.notes_due_today))
+                .catch(() => {});
+        }, 2000); // wait 2s after page load
+        return () => clearTimeout(timer);
     }, [user]);
 
     const navItems = [

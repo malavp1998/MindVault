@@ -1,4 +1,5 @@
 import uuid
+import time
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text
@@ -10,6 +11,9 @@ from middleware.auth import CurrentUser
 from models import User
 from services.revision_selector import get_revision_queue
 from services.spaced_repetition import compute_next_review, Rating
+
+_stats_cache: dict = {}
+_STATS_TTL = 300  # 5 minutes
 
 router = APIRouter(prefix="/revision", tags=["revision"])
 
@@ -259,6 +263,15 @@ async def get_stats(
     current_user: User = CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    user_key = str(current_user.id)
+    now = time.time()
+    
+    # Return cached result if fresh
+    if user_key in _stats_cache:
+        cached_time, cached_data = _stats_cache[user_key]
+        if now - cached_time < _STATS_TTL:
+            return cached_data
+
     stats_res = await db.execute(
         text("SELECT * FROM user_revision_stats WHERE user_id = :uid"),
         {"uid": str(current_user.id)}
@@ -276,12 +289,16 @@ async def get_stats(
     )
     notes_due_today = due_res.scalar() or 0
 
-    return {
+    result = {
         "current_streak": stats["current_streak"] if stats else 0,
         "total_reviews": stats["total_reviews"] if stats else 0,
         "notes_mastered": stats["notes_mastered"] if stats else 0,
         "notes_due_today": notes_due_today,
     }
+    
+    # Cache the result
+    _stats_cache[user_key] = (now, result)
+    return result
 
 @router.post("/debug/force-retention-update")
 async def force_retention_update(current_user: User = CurrentUser):
