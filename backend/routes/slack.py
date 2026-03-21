@@ -6,7 +6,7 @@ from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from sqlalchemy import select
 
 from config import get_settings
-from database import async_session_maker
+from database import async_session
 from models import User, Note
 from services.llm import llm_complete
 from services.pipeline import process_note
@@ -67,7 +67,7 @@ async def process_slack_message(text: str, slack_user_id: str, say):
         return
 
     # 1. Identity Mapping
-    async with async_session_maker() as db:
+    async with async_session() as db:
         result = await db.execute(select(User).filter_by(slack_user_id=slack_user_id))
         user = result.scalars().first()
         if not user:
@@ -102,7 +102,7 @@ Intent:"""
     if "SAVE_NOTE" in intent:
         await say("⏳ Saving to your vault...")
         
-        async with async_session_maker() as db:
+        async with async_session() as db:
             note = Note(
                 title=f"Slack Note: {text[:30]}...",
                 content=text,
