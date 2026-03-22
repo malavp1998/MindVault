@@ -36,7 +36,7 @@ async def slack_events_endpoint(req: Request):
 async def handle_message_events(body, logger, say):
     event = body.get("event", {})
     text = str(event.get("text", ""))
-    slack_user_id = str(event.get("user", ""))
+    slack_team_id = str(body.get("team_id") or event.get("team", ""))
     channel_type = str(event.get("channel_type", ""))
     
     # Ignore bot messages
@@ -47,41 +47,70 @@ async def handle_message_events(body, logger, say):
     if channel_type != "im":
         return
 
-    await process_slack_message(text, slack_user_id, say)
+    await process_slack_message(text, slack_team_id, say)
 
 @slack_app.event("app_mention")
 async def handle_app_mentions(body, logger, say):
     event = body.get("event", {})
     text = str(event.get("text", ""))
-    slack_user_id = str(event.get("user", ""))
+    slack_team_id = str(body.get("team_id") or event.get("team", ""))
     
     # Remove the mention from the text
     authed_users = event.get("authed_users", [""])
     mention = f"<@{authed_users[0]}>" if authed_users else ""
     text = text.replace(mention, "").strip()
     
-    await process_slack_message(text, slack_user_id, say)
+    await process_slack_message(text, slack_team_id, say)
 
-async def process_slack_message(text: str, slack_user_id: str, say):
-    if not text or not slack_user_id:
+async def process_slack_message(text: str, slack_team_id: str, say):
+    if not text or not slack_team_id:
+        return
+
+    # Check for account linking command
+    if text.lower().startswith("link account") or text.lower().startswith("link workspace"):
+        import re
+        from sqlalchemy import update, delete
+        match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
+        if match:
+            email = match.group(1)
+            async with async_session() as db:
+                result = await db.execute(select(User).filter_by(email=email))
+                real_user = result.scalars().first()
+                if real_user:
+                    old_result = await db.execute(select(User).filter_by(slack_user_id=slack_team_id))
+                    old_user = old_result.scalars().first()
+                    
+                    if old_user and old_user.id != real_user.id:
+                        # Move all notes to the real user
+                        await db.execute(update(Note).where(Note.user_id == old_user.id).values(user_id=real_user.id))
+                        # Delete the temporary auto-created user
+                        await db.execute(delete(User).where(User.id == old_user.id))
+                        
+                    real_user.slack_user_id = slack_team_id
+                    await db.commit()
+                    await say(f"🔗 Successfully linked this entire Slack Workspace to {email}! Any previous notes have been moved to your main account.")
+                else:
+                    await say(f"❌ Could not find an account with email {email}.")
+        else:
+            await say("❌ Please provide a valid email address. Example: `link workspace my@email.com`")
         return
 
     # 1. Identity Mapping
     async with async_session() as db:
-        result = await db.execute(select(User).filter_by(slack_user_id=slack_user_id))
+        result = await db.execute(select(User).filter_by(slack_user_id=slack_team_id))
         user = result.scalars().first()
         if not user:
-            # Auto-create user for frictionless demo
-            username = f"slack_{slack_user_id}_{text[:5]}"
+            # Auto-create a unique shared account for this Slack Workspace
+            username = f"slack_team_{slack_team_id}"
             user = User(
                 username=username,
                 email=f"{username}@slack.local",
-                slack_user_id=slack_user_id
+                slack_user_id=slack_team_id
             )
             db.add(user)
             await db.commit()
             await db.refresh(user)
-            await say(f"👋 Welcome! I've linked your Slack account to a new MindVault profile. Let me process your request...")
+            await say(f"👋 Welcome! I've created a dedicated MindVault profile for this Slack Workspace. All messages sent to me from anyone here will be saved into this shared vault. Let me process your request...")
 
         user_id = user.id
 
