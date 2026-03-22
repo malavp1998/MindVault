@@ -55,10 +55,9 @@ async def handle_app_mentions(body, logger, say):
     text = str(event.get("text", ""))
     slack_team_id = str(body.get("team_id") or event.get("team", ""))
     
-    # Remove the mention from the text
-    authed_users = event.get("authed_users", [""])
-    mention = f"<@{authed_users[0]}>" if authed_users else ""
-    text = text.replace(mention, "").strip()
+    # Remove the mention from the text using regex
+    import re
+    text = re.sub(r'<@[A-Z0-9]+>', '', text).strip()
     
     await process_slack_message(text, slack_team_id, say)
 
