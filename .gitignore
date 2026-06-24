@@ -25,5 +25,9 @@ frontend/dist/
 .idea/
 *.swp
 
+# Continue local config
+.continue/
+
 # Docker volumes
 pgdata/
+.tokensave
