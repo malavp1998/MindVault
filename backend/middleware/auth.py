@@ -45,30 +45,56 @@ _init_firebase()
 
 
 async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
-    # Commented out to bypass JWT requirement entirely
-    # credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User:
-    # --- MOCKED AUTHENTICATION ---
-    firebase_uid = "mock-local-user-1"
-    username = "LocalDev"
-    email = "localdev@example.com"
+    id_token = credentials.credentials
+    try:
+        decoded = firebase_auth.verify_id_token(id_token)
+    except firebase_auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Firebase token expired")
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Firebase token")
+    except Exception as e:
+        logger.warning(f"Firebase token verification failed: {e}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token verification failed")
+
+    firebase_uid: str = decoded["uid"]
+    email: str = decoded.get("email", "")
+    display_name: str = decoded.get("name", "") or decoded.get("display_name", "")
 
     result = await db.execute(select(User).where(User.firebase_uid == firebase_uid))
     user = result.scalar_one_or_none()
 
     if not user:
+        username = display_name or (email.split("@")[0] if email else firebase_uid[:12])
+        base_username = username
+        suffix = 1
+        while True:
+            existing = await db.execute(select(User).where(User.username == username))
+            if not existing.scalar_one_or_none():
+                break
+            username = f"{base_username}{suffix}"
+            suffix += 1
+            
         try:
             from sqlalchemy.exc import IntegrityError
-            user = User(firebase_uid=firebase_uid, username=username, email=email)
+            user = User(firebase_uid=firebase_uid, username=username, email=email or None)
             db.add(user)
-            await db.commit()
+            await db.flush()
             await db.refresh(user)
-            logger.info(f"Auto-provisioned MOCK user: {username}")
+            logger.info(f"Auto-provisioned new user: {username} (uid={firebase_uid})")
         except IntegrityError:
+            # Race condition: another concurrent request inserted this user first.
+            # Roll back the failed transaction and fetch the row the winner inserted.
             await db.rollback()
             result = await db.execute(select(User).where(User.firebase_uid == firebase_uid))
             user = result.scalar_one_or_none()
+            if not user:
+                # firebase_uid constraint violated (not username) — genuinely unexpected
+                logger.error(f"User provisioning conflict unresolvable for firebase_uid={firebase_uid}")
+                raise HTTPException(status_code=500, detail="User provisioning conflict")
+            logger.info(f"Race resolved: returning existing user {user.username} (uid={firebase_uid})")
 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
