@@ -7,7 +7,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault"
+    database_url: str = ""
 
     # Embedding provider: "openai" | "gemini" | "jina"
     embedding_provider: str = "jina"

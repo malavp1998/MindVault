@@ -271,7 +271,7 @@ APP_ENV=local
 GROQ_API_KEY=your_groq_key
 JINA_API_KEY=your_jina_key
 SARVAM_API_KEY=your_sarvam_key
-DATABASE_URL=postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault
+DATABASE_URL=postgresql+asyncpg://mindvault:your_secure_password@localhost:5432/mindvault
 ```
 
 ### Step 3 — Run the Application
@@ -614,7 +614,7 @@ Claude: [calls get_due_reviews()]
 | `SARVAM_API_KEY`       | —                                                     | Sarvam AI key — used as Indic fallback only |
 | `LLM_INDIC_FALLBACK`   | `sarvam-2b`                                           | Fallback Indic model when Gemini limit hits |
 | `JINA_API_KEY`         | —                                                     | Jina AI key for embeddings               |
-| `DATABASE_URL`         | `postgresql+asyncpg://***REMOVED***@localhost:5432/mindvault` | PostgreSQL connection |
+| `DATABASE_URL`         | `postgresql+asyncpg://mindvault:your_secure_password@localhost:5432/mindvault` | PostgreSQL connection |
 | `JWT_SECRET_KEY`       | —                                                     | Secret for JWT token generation          |
 | `JWT_ALGORITHM`        | `HS256`                                               | JWT signing algorithm                    |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `10080`                                  | Token expiry (7 days default)            |

@@ -3,7 +3,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-    apiKey: "***REMOVED***",
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: "mindvault-1.firebaseapp.com",
     databaseURL: "https://mindvault-1-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "mindvault-1",
