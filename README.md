@@ -7,9 +7,9 @@
 ### 🌐 Live Demo
 
 | | URL |
-|---|---|
-| **Dashboard** | [mind-vault-ecru.vercel.app](https://mind-vault-ecru.vercel.app) |
-| **Backend API** | [mindvault-wspy.onrender.com/docs](https://mindvault-wspy.onrender.com/docs) |
+|---|---|https://mind-vault-4fwjzkhhe-piyush-malav-s-projects.vercel.app
+| **Dashboard** | [https://mind-vault-4fwjzkhhe-piyush-malav-s-projects.vercel.app) |
+| **Backend API** | [mindvault-wspy.onrender.com/docs](https://mindvault-sfny.onrender.com//docs) |
 | **Chrome Extension** | [Chrome Web Store](https://chrome.google.com/webstore) *(pending review)* |
 
 ---
