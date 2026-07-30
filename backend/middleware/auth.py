@@ -37,7 +37,7 @@ def _init_firebase():
     else:
         cred = credentials.ApplicationDefault()
         
-    firebase_admin.initialize_app(cred, {"projectId": os.getenv("FIREBASE_PROJECT_ID", "mindvault-1")})
+    firebase_admin.initialize_app(cred, {"projectId": os.getenv("FIREBASE_PROJECT_ID", "mindvault-42341")})
     _firebase_initialized = True
     logger.info("✅ Firebase Admin SDK initialized")
 

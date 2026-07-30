@@ -4,13 +4,11 @@ import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: "mindvault-1.firebaseapp.com",
-    databaseURL: "https://mindvault-1-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "mindvault-1",
-    storageBucket: "mindvault-1.firebasestorage.app",
-    messagingSenderId: "927591646375",
-    appId: "1:927591646375:web:34c3cdbf8772ab92be8782",
-    measurementId: "G-7PHBNGKBGX"
+    authDomain: "mindvault-42341.firebaseapp.com",
+    projectId: "mindvault-42341",
+    storageBucket: "mindvault-42341.firebasestorage.app",
+    messagingSenderId: "55938949261",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
