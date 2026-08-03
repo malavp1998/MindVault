@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth } from "../firebase";
-import { Settings, Key, Shield, LogOut, X } from "lucide-react";
+import { getMe, linkPhone, unlinkPhone } from "../api";
+import { Settings, Key, Shield, LogOut, X, MessageCircle } from "lucide-react";
 
 export default function SettingsModal({ onClose }) {
     const [tab, setTab] = useState("general");
@@ -9,6 +10,50 @@ export default function SettingsModal({ onClose }) {
     });
     const [saved, setSaved] = useState(false);
     const user = auth.currentUser;
+
+    // WhatsApp linking
+    const [phone, setPhone] = useState("");
+    const [linkedPhone, setLinkedPhone] = useState(null);
+    const [phoneStatus, setPhoneStatus] = useState(null); // { type: "ok"|"error", text }
+    const [phoneBusy, setPhoneBusy] = useState(false);
+
+    useEffect(() => {
+        getMe()
+            .then(data => setLinkedPhone(data.phone_number || null))
+            .catch(() => { /* non-fatal — the field just starts empty */ });
+    }, []);
+
+    const savePhone = async () => {
+        setPhoneBusy(true);
+        setPhoneStatus(null);
+        try {
+            const data = await linkPhone(phone);
+            setLinkedPhone(data.phone_number);
+            setPhone("");
+            setPhoneStatus({ type: "ok", text: "Linked. Message the bot on WhatsApp to start." });
+        } catch (err) {
+            setPhoneStatus({
+                type: "error",
+                text: err.response?.data?.detail || "Couldn't link that number.",
+            });
+        } finally {
+            setPhoneBusy(false);
+        }
+    };
+
+    const removePhone = async () => {
+        setPhoneBusy(true);
+        setPhoneStatus(null);
+        try {
+            await unlinkPhone();
+            setLinkedPhone(null);
+            setPhoneStatus({ type: "ok", text: "Number removed." });
+        } catch {
+            setPhoneStatus({ type: "error", text: "Couldn't remove that number." });
+        } finally {
+            setPhoneBusy(false);
+        }
+    };
 
     const saveKeys = () => {
         localStorage.setItem("mv_api_keys", JSON.stringify(apiKeys));
@@ -120,6 +165,72 @@ export default function SettingsModal({ onClose }) {
                                 <span style={{ color: "var(--text-muted, #6b6b6b)" }}>Email</span>
                                 <span style={{ fontWeight: 600 }}>{user?.email || "vinny@gmail.com"}</span>
                             </div>
+                        </div>
+
+                        {/* WhatsApp linking */}
+                        <div style={{ marginTop: 36 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <MessageCircle size={16} strokeWidth={2} style={{ color: "var(--accent, #944E87)" }} />
+                                <h3 style={{ fontWeight: 700, fontSize: 14, color: "var(--text-dark, #1a1a1a)", margin: 0 }}>
+                                    WhatsApp
+                                </h3>
+                            </div>
+                            <p style={{ color: "var(--text-muted, #6b6b6b)", fontSize: 12, margin: "0 0 16px 0", lineHeight: 1.5 }}>
+                                Link your number to save notes and ask questions from WhatsApp.
+                            </p>
+
+                            {linkedPhone ? (
+                                <div style={{ ...row, borderBottom: "none" }}>
+                                    <span style={{ fontWeight: 600 }}>{linkedPhone}</span>
+                                    <button
+                                        onClick={removePhone}
+                                        disabled={phoneBusy}
+                                        style={{
+                                            background: "none", border: "1px solid var(--border, #e8e5e0)",
+                                            borderRadius: 20, padding: "6px 14px", fontSize: 12,
+                                            fontWeight: 600, color: "#EF4444",
+                                            cursor: phoneBusy ? "default" : "pointer",
+                                            opacity: phoneBusy ? 0.6 : 1,
+                                        }}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", gap: 10 }}>
+                                    <input
+                                        style={{ ...inp, flex: 1 }}
+                                        type="tel"
+                                        placeholder="+91 89555 58388"
+                                        value={phone}
+                                        onChange={e => setPhone(e.target.value)}
+                                        onKeyDown={e => { if (e.key === "Enter" && phone.trim()) savePhone(); }}
+                                    />
+                                    <button
+                                        onClick={savePhone}
+                                        disabled={phoneBusy || !phone.trim()}
+                                        style={{
+                                            padding: "12px 22px",
+                                            background: "var(--accent, #944E87)", color: "#fff",
+                                            border: "none", borderRadius: 24,
+                                            fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
+                                            cursor: (phoneBusy || !phone.trim()) ? "default" : "pointer",
+                                            opacity: (phoneBusy || !phone.trim()) ? 0.5 : 1,
+                                        }}
+                                    >
+                                        {phoneBusy ? "Linking…" : "Link"}
+                                    </button>
+                                </div>
+                            )}
+
+                            {phoneStatus && (
+                                <p style={{
+                                    fontSize: 12, marginTop: 12, marginBottom: 0,
+                                    color: phoneStatus.type === "ok" ? "#16A34A" : "#EF4444",
+                                }}>
+                                    {phoneStatus.text}
+                                </p>
+                            )}
                         </div>
                     </>}
 

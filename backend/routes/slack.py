@@ -8,7 +8,7 @@ from sqlalchemy import select
 from config import get_settings
 from database import async_session
 from models import User, Note
-from services.llm import llm_complete
+from services.intent import SAVE_NOTE, classify_message_intent
 from services.pipeline import process_note
 from services.agent import rag_agent
 
@@ -113,21 +113,10 @@ async def process_slack_message(text: str, slack_team_id: str, say):
 
         user_id = user.id
 
-    # 2. Intent Routing via LLM
-    prompt = f"""<role>You are the MindVault intent router.</role>
-<task>Classify the following user message into one of two intents: "SAVE_NOTE" or "SEARCH_OR_CHAT".</task>
-<rules>
-- "SAVE_NOTE": The user is giving you information, a thought, a link, or asking you to save/remember something. Example: "Save this", "My thoughts on X", "Meeting notes: ..."
-- "SEARCH_OR_CHAT": The user is asking a question, asking you to find something, or having a general conversation. Example: "What do I know about X?", "Find my notes on Y"
-- Return EXACTLY ONE string: "SAVE_NOTE" or "SEARCH_OR_CHAT". Nothing else.
-</rules>
-<message>{text}</message>
-Intent:"""
-    
-    intent_raw = await llm_complete(prompt, "en")
-    intent = intent_raw.strip().upper()
-    
-    if "SAVE_NOTE" in intent:
+    # 2. Intent Routing via LLM (shared with the WhatsApp route)
+    intent = await classify_message_intent(text)
+
+    if intent == SAVE_NOTE:
         await say("⏳ Saving to your vault...")
         
         async with async_session() as db:

@@ -46,6 +46,12 @@
 
 *Spaced repetition review queue. "Reveal Summary" flashcard-style interface with progress tracking and memory retention scoring.*
 
+### WhatsApp Bot — Save and Search from Your Phone
+
+<img src="screenshots/whatsapp.jpeg" alt="WhatsApp Bot" width="380">
+
+*Ask your vault anything from WhatsApp. The LLM classifies intent — statements get saved as notes, questions run the RAG agent and return a synthesized answer with cited source notes.*
+
 ### API Documentation — Swagger UI
 
 ![API Docs](screenshots/api_docs.png)
@@ -62,6 +68,8 @@
 - 🔍 **Semantic Search + RAG** — Natural language search powered by pgvector cosine similarity. Returns a synthesized answer with cited source note cards
 - 🌐 **Chrome Extension** — Popup-based extension to save any webpage, add annotations/tags, search your vault, and view related notes. No sidebar injection — works via toolbar icon click
 - 💬 **AI Chat** — Chat with your vault. Ask questions and get answers grounded in your saved notes with full conversation history
+- 📱 **WhatsApp Bot** — Message your vault from WhatsApp. Statements get saved as notes, questions get RAG answers with sources. Link your number once from Settings — no UUIDs, no commands to remember
+- 💼 **Slack Bot** — Same save-or-search behaviour in Slack DMs and channel mentions, sharing the exact same intent classifier
 - 🔐 **Authentication** — JWT-based auth with login/register. Per-user data isolation — each user sees only their own notes
 - ⚡ **Semantic Cache** — LLM responses cached by semantic similarity. Repeated or similar queries return instantly without API calls
 - 📺 **YouTube Summarizer** — Paste any YouTube URL. Fetches captions or transcribes audio via Groq Whisper API, then summarizes and saves as a note. Temp audio deleted immediately after transcription
@@ -91,7 +99,16 @@
 │  • /topics      │     │  │ • Concepts  │  │ PostgreSQL   │  │
 │  • /note/:id    │     │  │ • Cluster   │  │ + pgvector   │  │
 │  • /search      │     │  │ • Link      │──│              │  │
-└─────────────────┘     │  └─────────────┘  └──────────────┘  │
+└─────────────────┘     │  └──────▲──────┘  └──────────────┘  │
+                        │         │                            │
+┌─────────────────┐     │  ┌──────┴───────┐                    │
+│  WhatsApp       │────▶│  │ Messaging    │                    │
+│  (Twilio)       │     │  │ /whatsapp/*  │                    │
+├─────────────────┤     │  │ /slack/*     │                    │
+│  Slack          │────▶│  │              │                    │
+│  (slack-bolt)   │     │  │ shared intent│                    │
+└─────────────────┘     │  │ classifier   │                    │
+                        │  └──────────────┘                    │
                         └─────────────────────────────────────┘
                                     ▲
 ┌─────────────────┐                 │
@@ -153,6 +170,40 @@ User pastes YouTube URL
     Temp audio file deleted immediately via finally block
             ↓
     Transcript flows into standard note processing pipeline
+```
+
+### Messaging Flow (WhatsApp / Slack)
+
+Both channels share one intent classifier (`services/intent.py`) and the same
+downstream services — only identity resolution and the reply transport differ.
+
+```
+Inbound message (WhatsApp via Twilio, or Slack DM)
+            ↓
+    Verify sender signature
+    • WhatsApp → X-Twilio-Signature HMAC
+    • Slack    → slack-bolt signing secret
+            ↓
+    Resolve identity → User row
+    • WhatsApp → users.phone_number  (must be linked from Settings first)
+    • Slack    → users.slack_user_id (auto-created per workspace)
+            ↓
+    LLM intent classification (SAVE_NOTE vs SEARCH_OR_CHAT)
+            ↓
+    ┌──────────────────────┬──────────────────────────┐
+    │  SAVE_NOTE           │  SEARCH_OR_CHAT          │
+    │  "Java streams are   │  "What do I know about   │
+    │   lazy"              │   Java?"                 │
+    ↓                      ↓                          │
+    Note saved             RAG agent (search →        │
+    → standard pipeline    synthesize)                │
+    (embed, tag, link)     → answer + source titles   │
+    └──────────────────────┴──────────────────────────┘
+            ↓
+    Reply sent back to the user
+    • WhatsApp → webhook acks instantly, answer pushed via Twilio REST
+      (AI work routinely exceeds Twilio's ~10s window)
+    • Slack    → say() can post multiple times inline
 ```
 
 ### Multilingual Routing
@@ -222,6 +273,8 @@ App continues working even when multiple free tier limits are hit simultaneously
 | Clustering           | scikit-learn KMeans               | Auto topic organization              |
 | Language Detection   | lingua                            | Route content to right LLM           |
 | MCP                  | FastMCP                           | Claude Desktop integration           |
+| WhatsApp             | Twilio WhatsApp API               | Save + search from your phone        |
+| Slack                | slack-bolt (async)                | Save + search from Slack             |
 | Frontend             | React 18 + Vite + TailwindCSS v4  | Dashboard UI                         |
 | Graph View           | react-force-graph-2d + D3         | Obsidian-style knowledge graph       |
 | Chrome Extension     | Manifest V3                       | Browser sidebar integration          |
@@ -359,6 +412,71 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 Restart Claude Desktop. You can now ask Claude to search your vault, add notes, and summarize topics directly.
 
+### Step 6 — Connect WhatsApp (optional)
+
+Message your vault from your phone. Statements become notes, questions get RAG answers.
+
+**1. Join the Twilio WhatsApp Sandbox**
+
+Twilio Console → **Messaging → Try it out → Send a WhatsApp message**. You get a
+sandbox number (e.g. `+1 415 523 8886`) and a join code. Send `join <your-code>`
+to that number from WhatsApp — you should get *"✅ You are all set!"*.
+
+The sandbox is free and needs no Meta business verification. It's sufficient for
+personal use indefinitely; a production WhatsApp Business sender is only needed
+to message people who haven't joined.
+
+**2. Add credentials to `.env`**
+
+```env
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_PHONE_NUMBER=whatsapp:+14155238886
+```
+
+**3. Expose your backend**
+
+Twilio needs a public HTTPS URL — it can't reach `localhost`.
+
+```bash
+cloudflared tunnel --url http://localhost:8000
+# or use your deployed Render URL
+```
+
+**4. Point Twilio at the webhook**
+
+Sandbox Settings → *When a message comes in*:
+
+| Field | Value |
+|---|---|
+| URL | `https://<your-domain>/whatsapp/webhook` |
+| Method | `POST` |
+
+**5. Link your number**
+
+Open the dashboard → **Settings → General → WhatsApp** → enter your number → **Link**.
+Country code is optional for 10-digit Indian numbers (`8955558388` → `+918955558388`).
+
+Linking happens in the web app, not over WhatsApp, because your identity is already
+proven by Firebase there — no OTP round trip needed, and an unknown number can never
+claim a vault.
+
+**6. Message the bot**
+
+```
+You:  Remember: Java streams are lazy, terminal ops trigger evaluation
+Bot:  ✅ Saved to your vault. I'm summarizing, tagging and linking it now.
+
+You:  What do I know about Java?
+Bot:  Your notes say Java streams are lazily evaluated...
+      *Sources:*
+      • Remember: Java streams are lazy…
+```
+
+> **Security note:** the webhook rejects any request without a valid
+> `X-Twilio-Signature` HMAC. Unlinked numbers get setup instructions and nothing else —
+> a phone number is never auto-provisioned into a vault.
+
 ---
 
 ## ☁️ Production Deployment
@@ -396,6 +514,25 @@ Deploy the full stack using **100% free tiers** — no credit card needed.
 4. Deploy
 
 The frontend uses `VITE_API_URL` to route API calls to the Render backend in production. Locally it falls back to `/api` which Vite proxies to Docker.
+
+### Messaging Webhooks — Twilio & Slack
+
+Once the backend is on Render, repoint both webhooks at the live URL:
+
+| Channel | Where | URL |
+|---|---|---|
+| WhatsApp | Twilio → WhatsApp Sandbox Settings | `https://your-app.onrender.com/whatsapp/webhook` |
+| Slack | Slack App → Event Subscriptions | `https://your-app.onrender.com/slack/events` |
+
+Add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` to Render's
+environment variables — never commit them to `.env.example` or `config.py`.
+
+Signature verification is proxy-aware: it rebuilds the signed URL from
+`X-Forwarded-Proto` / `X-Forwarded-Host`, so Render's TLS termination doesn't
+break the HMAC check.
+
+> **Note:** Render's free tier sleeps after 15 minutes idle. The first message after
+> a sleep may time out while the service wakes — send it again.
 
 ### Chrome Extension
 
@@ -442,6 +579,23 @@ The frontend uses `VITE_API_URL` to route API calls to the Render backend in pro
 5. Hover a node to highlight all connections
 6. Click a node to open the detail side panel
 7. Scroll to zoom, drag to pan, right-click to open full note
+
+### Saving and Searching from WhatsApp
+
+Once your number is linked (Settings → General → WhatsApp), just message the bot.
+There are no commands — an LLM decides what you meant:
+
+| You send | Interpreted as | What happens |
+|---|---|---|
+| *"Meeting notes: shipped v2 today"* | Save | New note → embedded, tagged, linked, clustered |
+| *"Remember pgvector needs an index"* | Save | Same |
+| *"What did I learn about Rust?"* | Search | RAG answer + source note titles |
+| *"Find my notes on transformers"* | Search | Same |
+
+Rule of thumb: **statements save, questions search.** If classification fails, it
+defaults to search — reading your vault is always safe, writing to it is not.
+
+Attachments aren't supported yet; send text and you'll get a note back.
 
 ### Using with Claude Desktop
 
@@ -542,6 +696,8 @@ Returns full node and link data for the Obsidian-style graph view.
 | `POST`   | `/auth/register`              | Register a new user                  |
 | `POST`   | `/auth/login`                 | Login and get JWT token              |
 | `GET`    | `/auth/me`                    | Get current user info                |
+| `POST`   | `/auth/phone`                 | Link a WhatsApp number to your account |
+| `DELETE` | `/auth/phone`                 | Unlink your WhatsApp number          |
 | `POST`   | `/api/notes`                  | Create a new note                    |
 | `GET`    | `/api/notes`                  | List all notes (filterable)          |
 | `GET`    | `/api/notes/search?q=`        | Semantic search + optional RAG       |
@@ -560,6 +716,8 @@ Returns full node and link data for the Obsidian-style graph view.
 | `POST`   | `/api/chat`                   | Chat with your vault (RAG)           |
 | `GET`    | `/api/chat/sessions`          | List chat sessions                   |
 | `GET`    | `/api/cache/stats`            | Semantic cache statistics            |
+| `POST`   | `/whatsapp/webhook`           | Twilio inbound message (signature-verified) |
+| `POST`   | `/slack/events`               | Slack Events API (signature-verified) |
 | `GET`    | `/health`                     | Health check                         |
 
 ---
@@ -622,6 +780,11 @@ Claude: [calls get_due_reviews()]
 | `RECLUSTER_EVERY_N`    | every note                                            | Re-cluster on every new note saved       |
 | `EMBEDDING_MODEL`      | `jina-embeddings-v3`                                  | Jina embedding model                     |
 | `VITE_API_URL`         | —                                                     | Frontend env: production backend URL     |
+| `TWILIO_ACCOUNT_SID`   | —                                                     | Twilio SID — enables the WhatsApp bot     |
+| `TWILIO_AUTH_TOKEN`    | —                                                     | Twilio token — also verifies inbound webhook signatures |
+| `TWILIO_PHONE_NUMBER`  | —                                                     | WhatsApp sender, e.g. `whatsapp:+14155238886` |
+| `SLACK_BOT_TOKEN`      | —                                                     | Slack bot OAuth token                    |
+| `SLACK_SIGNING_SECRET` | —                                                     | Verifies inbound Slack request signatures |
 
 ---
 
@@ -651,7 +814,8 @@ This project was built as a portfolio piece showcasing AI engineering skills:
 | Semantic Search        | Cosine similarity via pgvector `<=>` operator                             |
 | LLM Orchestration      | Smart routing with primary/fallback chain — Groq 70b + 8b for English, Gemini + Sarvam for Indic |
 | Agentic Pipeline       | Async note processing pipeline triggered on every save                    |
-| MCP Integration        | FastMCP server with 5 tools for Claude Desktop                            |
+| MCP Integration        | FastMCP server with 7 tools for Claude Desktop                            |
+| Webhook Integrations   | Twilio WhatsApp + Slack bots with HMAC signature verification and shared services |
 | Multilingual AI        | lingua detection + Groq, Gemini, and Sarvam routing with auto fallback    |
 | Chrome Extension       | Manifest V3 popup-based extension (activeTab + scripting)                 |
 | Authentication         | JWT-based auth with per-user data isolation                               |
@@ -682,12 +846,16 @@ mindvault/
 │   │   ├── topics.py          # Topic endpoints + recluster
 │   │   ├── graph.py           # Graph data endpoint
 │   │   ├── chat.py            # Chat with vault (multi-turn RAG)
+│   │   ├── slack.py           # Slack Events API — save or search from Slack
+│   │   ├── whatsapp.py        # Twilio webhook — save or search from WhatsApp
 │   │   └── cache.py           # Semantic cache stats endpoint
 │   └── services/
 │       ├── embedding.py       # Jina AI embeddings (padded to 1536d)
 │       ├── llm.py             # Smart LLM routing + fallback chain
 │       ├── agent.py           # RAG agent (LangGraph: search → synthesize)
 │       ├── chat.py            # Chat service with conversation history
+│       ├── intent.py          # SAVE_NOTE vs SEARCH_OR_CHAT — shared by Slack + WhatsApp
+│       ├── whatsapp.py        # Phone normalization, Twilio signature check, outbound send
 │       ├── semantic_cache.py  # Semantic similarity caching for LLM responses
 │       ├── clustering.py      # KMeans + silhouette scoring
 │       ├── tagging.py         # Auto-tag generation
@@ -724,6 +892,19 @@ mindvault/
 ├── .env.example
 └── README.md
 ```
+
+---
+
+## 📚 Further Documentation
+
+| Doc | Contents |
+|---|---|
+| [OVERVIEW.md](./OVERVIEW.md) | Short orientation — features, stack, when to use what |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Full system architecture, AI services, LangGraph agents, data model |
+| [TECHNIQUES.md](./TECHNIQUES.md) | ML techniques — semantic caching, incremental clustering, structured prompting |
+| [WHATSAPP_SETUP.md](./WHATSAPP_SETUP.md) | WhatsApp bot — Twilio sandbox, webhook, number linking, troubleshooting |
+| [SLACK_SETUP.md](./SLACK_SETUP.md) | Slack bot — app creation, scopes, event subscriptions |
+| [EVALUATION.md](./EVALUATION.md) | Retrieval evaluation — golden dataset, precision@3, regression gate |
 
 ---
 

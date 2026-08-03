@@ -70,6 +70,17 @@ export const sendChatMessage = (message, sessionId = null) =>
 export const deleteChatSession = (sessionId) =>
     api.delete(`/chat/sessions/${sessionId}`);
 
+// ─── Account ───────────────────────────────────────────────────
+
+export const getMe = () =>
+    api.get('/auth/me', { baseURL: API_URL }).then(r => r.data);
+
+export const linkPhone = (phone_number) =>
+    api.post('/auth/phone', { phone_number }, { baseURL: API_URL }).then(r => r.data);
+
+export const unlinkPhone = () =>
+    api.delete('/auth/phone', { baseURL: API_URL }).then(r => r.data);
+
 // ─── Eval ──────────────────────────────────────────────────────
 
 export const submitVote = (query_text, note_id, vote) =>

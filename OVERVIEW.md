@@ -21,6 +21,7 @@ MindVault is a full-stack, AI-powered knowledge management system that helps you
 | **🔄 Spaced Repetition** | FSRS-inspired algorithm to review notes just before you forget them |
 | **🔗 MCP Server** | Claude Desktop integration via Model Context Protocol |
 | **💼 Slack Bot** | Save notes and search your vault from Slack DMs |
+| **📱 WhatsApp Bot** | Message your vault from your phone — statements save, questions get RAG answers |
 | **🌐 Chrome Extension** | Save web pages and YouTube videos directly from your browser |
 | **🌍 Multilingual** | Supports English + 10 Indic languages with smart LLM routing (Groq, Gemini, Sarvam) |
 | **⚡ Semantic Caching** | Avoids redundant LLM calls via pgvector similarity cache |
@@ -49,7 +50,8 @@ Deployment:  Docker Compose, Render-ready
 
 ```
 ┌─ Clients ───────────────────────────────────────────────┐
-│  Web UI │ Chrome Ext. │ Claude Desktop │ Slack │   API  │
+│  Web UI │ Chrome Ext. │ Claude Desktop                  │
+│  Slack  │ WhatsApp    │ REST API                        │
 └────────────────────────┬────────────────────────────────┘
                          │
 ┌─ Backend ──────────────▼────────────────────────────────┐
@@ -100,6 +102,16 @@ User Message → Intent Classifier (READ/WRITE)
                 └── WRITE → propose action → user confirms → execute
 ```
 
+### Messaging Flow (Slack / WhatsApp)
+
+```
+Inbound message → Verify signature (Slack secret / Twilio HMAC)
+                → Resolve identity (slack_user_id / phone_number)
+                → Intent Classifier (SAVE_NOTE / SEARCH_OR_CHAT)
+                   ├── SAVE   → Note → ingestion pipeline
+                   └── SEARCH → RAG agent → answer + sources
+```
+
 ---
 
 ## Getting Started
@@ -131,6 +143,7 @@ cd frontend && npm install && npm run dev
 | See how things connect | Knowledge Graph page |
 | Review what I'm forgetting | Revision page (spaced repetition) |
 | Save/search from Slack | DM the Slack bot |
+| Save/search from my phone | WhatsApp the bot (link your number in Settings first) |
 | Use from Claude Desktop | Connect via MCP |
 | Write a script against it | REST API or MCP tools |
 
@@ -139,5 +152,8 @@ cd frontend && npm install && npm run dev
 ## Documentation
 
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** — Full detailed architecture
+- **[TECHNIQUES.md](./TECHNIQUES.md)** — ML techniques and optimizations
+- **[WHATSAPP_SETUP.md](./WHATSAPP_SETUP.md)** — WhatsApp bot setup and deployment
+- **[SLACK_SETUP.md](./SLACK_SETUP.md)** — Slack bot setup and deployment
 - **API Docs:** `http://localhost:8000/docs` (FastAPI Swagger)
 - **MCP:** `http://localhost:8000/mcp` (Claude Desktop)

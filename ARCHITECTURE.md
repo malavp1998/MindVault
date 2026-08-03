@@ -8,17 +8,17 @@
 
 ## 1. System Overview
 
-MindVault is an **AI-Powered Knowledge Management System** — a "second brain" that ingests content (web pages, YouTube videos, voice notes, Slack messages), automatically summarizes, tags, clusters, and links it. It exposes a **REST API**, an **MCP server** (Claude Desktop), a **Slack bot**, and a **React dashboard**.
+MindVault is an **AI-Powered Knowledge Management System** — a "second brain" that ingests content (web pages, YouTube videos, voice notes, Slack and WhatsApp messages), automatically summarizes, tags, clusters, and links it. It exposes a **REST API**, an **MCP server** (Claude Desktop), a **Slack bot**, a **WhatsApp bot**, and a **React dashboard**.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                        Clients & Interfaces                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
-│  │ Web UI   │  │ Chrome   │  │ Claude   │  │ Slack    │         │
-│  │ (React)  │  │ Ext.     │  │ Desktop  │  │          │         │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘         │
-│       │              │              │              │              │
-│       ▼              ▼              ▼              ▼              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────┐│
+│  │ Web UI   │  │ Chrome   │  │ Claude   │  │ Slack    │  │Whats││
+│  │ (React)  │  │ Ext.     │  │ Desktop  │  │          │  │App  ││
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──┬──┘│
+│       │              │              │              │          │   │
+│       ▼              ▼              ▼              ▼          ▼   │
 │  ┌──────────────────────────────────────────────────────────┐    │
 │  │                   FastAPI Backend                         │    │
 │  │  ┌──────┐ ┌────────┐ ┌────────┐ ┌──────┐ ┌───────────┐  │    │
@@ -109,6 +109,7 @@ sequenceDiagram
 | **Audio (Voice Notes)** | `POST /notes/audio` | MP3/WAV file | Groq Whisper → pipeline |
 | **MCP Tool** | MCP `add_note` | Text + user_id | Direct → pipeline |
 | **Slack DM** | `POST /slack/events` | Message text | Intent routing → pipeline or RAG |
+| **WhatsApp** | `POST /whatsapp/webhook` | Message text (Twilio form) | Signature check → intent routing → pipeline or RAG |
 
 ---
 
@@ -283,17 +284,45 @@ flowchart LR
 
 **Write Safety:** All write operations return `PendingAgentAction` records with 5-minute TTL. The frontend must explicitly call `POST /api/agent/confirm/{token}` with `approved=true` to execute.
 
-### 4.3 Slack Bot Integration (`routes/slack.py`)
+### 4.3 Messaging Bots (`routes/slack.py`, `routes/whatsapp.py`)
+
+Both channels share the same shape. Only identity resolution and the reply
+transport differ — intent classification and everything downstream is identical.
 
 ```
-Slack DM ──► Intent Router (LLM)
-               ├── "SAVE_NOTE" ──► Create Note ──► Pipeline
-               └── "SEARCH_OR_CHAT" ──► RAG Agent
+Inbound message ──► Verify sender signature
+                         ↓
+                    Resolve identity → User
+                         ↓
+                    Intent Router (LLM, services/intent.py)
+                       ├── "SAVE_NOTE"      ──► Create Note ──► Pipeline
+                       └── "SEARCH_OR_CHAT" ──► RAG Agent ──► answer + sources
 ```
 
-- Auto-creates per-workspace users on first message
-- Supports `link workspace email@example.com` for account linking
-- Handles `app_mention` events in channels
+| | Slack | WhatsApp |
+|---|---|---|
+| Transport | slack-bolt Events API | Twilio webhook (form-encoded) |
+| Signature | `slack_signing_secret` | `X-Twilio-Signature` HMAC |
+| Identity | `users.slack_user_id` (stores **team** id — one shared vault per workspace) | `users.phone_number` (E.164, per person) |
+| Provisioning | Auto-creates a workspace user on first message | **Never auto-creates** — unlinked numbers get setup instructions |
+| Linking | `link workspace email@example.com` in-channel | From the web app: `POST /auth/phone` (Firebase-authenticated) |
+| Reply | `say()` — can post multiple times inline | Webhook acks immediately; answer pushed via Twilio REST |
+
+**Why WhatsApp replies asynchronously.** Twilio expects a webhook response within
+~10 seconds, but embedding + LLM synthesis routinely exceeds that. The webhook
+returns empty TwiML immediately and `asyncio.create_task` handles classification,
+retrieval, and the outbound push. Slack doesn't need this because `say()` can be
+called repeatedly on an open connection.
+
+**Why linking happens in the web app.** Identity is already proven by the Firebase
+token there, so no OTP round trip is needed and an unknown number can never claim
+a vault. `phone_number` is `UNIQUE`, so auto-provisioning would let a wrong number
+permanently squat a real one.
+
+**Shared services** (`services/whatsapp.py`):
+- `normalize_phone()` — E.164 normalization; strips `whatsapp:` prefix, spaces, dashes; bare 10-digit numbers assume `+91`
+- `verify_twilio_signature()` — rebuilds the signed URL from `X-Forwarded-Proto`/`X-Forwarded-Host` so proxied TLS (Render, Cloudflare) doesn't break the HMAC
+- `send_whatsapp_message()` — outbound REST; the Twilio SDK is synchronous, so it runs via `asyncio.to_thread`
 
 ### 4.4 MCP Server (`mcp_server.py`)
 
@@ -462,6 +491,14 @@ services:
 - **Rate limiting:** `slowapi` rate limiter on auth routes
 - **CORS:** Wide-open for dev (extension + dashboard), tighten in production
 - **Auth bypass:** Mock auth for local dev (`firebase_uid: "mock-local-user-1"`)
+- **Webhook signatures:** `/whatsapp/webhook` verifies `X-Twilio-Signature` (HMAC over URL + params) and returns 403 otherwise; `/slack/events` uses slack-bolt's signing-secret verification
+- **No phone auto-provisioning:** `users.phone_number` is `UNIQUE`; unlinked numbers receive setup instructions and never create an account. Linking requires a Firebase-authenticated `POST /auth/phone`
+
+**Known gaps** (see the identity comparison in §4.3):
+
+- `/mcp` has **no authentication** — `user_id` is a tool argument validated only for UUID *format*, so anyone with a UUID can read or write that vault. Authenticate the connection and derive `user_id` server-side before exposing it publicly.
+- `read_note` (`services/agent_tools.py`) and the update/delete branches of `POST /api/agent/confirm/{token}` select notes by id **without** a `user_id` filter.
+- `search_vault` takes `user_id` as an LLM-supplied argument rather than injecting it via `config["configurable"]` as the DB session already is.
 
 ---
 

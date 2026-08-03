@@ -107,6 +107,9 @@ app.include_router(eval_router)
 from routes.slack import router as slack_router
 app.include_router(slack_router, prefix="/slack", tags=["slack"])
 
+from routes.whatsapp import router as whatsapp_router
+app.include_router(whatsapp_router, prefix="/whatsapp", tags=["whatsapp"])
+
 # MCP server direct route injection instead of mount to avoid /mcp/mcp duplication
 app.routes.extend(mcp_app.routes)
 

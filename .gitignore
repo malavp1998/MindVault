@@ -31,3 +31,6 @@ frontend/dist/
 # Docker volumes
 pgdata/
 .tokensave
+
+# Local debug overlay (VS Code debugpy)
+docker-compose.debug.yml
