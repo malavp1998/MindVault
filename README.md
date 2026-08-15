@@ -58,6 +58,12 @@
 
 *Auto-generated interactive API docs via FastAPI. All endpoints for auth, notes, topics, graph, chat, eval, and health checks.*
 
+### Admin Eval Dashboard — RAG Retrieval Quality
+
+![Eval Dashboard](screenshots/eval_dashboard.png)
+
+*Company-wide retrieval quality view — Precision@3 and avg similarity trends across eval runs, live search quality over the last 30 days, thumbs up/down user feedback with most-downvoted results, and low-confidence queries flagged as golden-set candidates. Restricted to emails in `ADMIN_EMAILS`.*
+
 ---
 
 ## ✨ Features
