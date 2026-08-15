@@ -78,6 +78,7 @@
 - 🤖 **MCP Server** — Exposes 5 tools via Model Context Protocol so Claude Desktop or any MCP client can search, add, and explore your vault
 - 🔗 **Backlinks** — Every note shows which other notes reference it, building a bidirectional knowledge graph automatically
 - ☁️ **Zero Local AI** — All AI runs on free cloud APIs. No GPU, no heavy local models, no cost
+- 📊 **Admin Eval Dashboard** — Company-wide retrieval quality view (precision trend, live search quality, thumbs up/down feedback, most-downvoted results) with a one-click **Run Eval** button per user that promotes thumbs-up votes into the golden dataset before scoring. Restricted to emails listed in `ADMIN_EMAILS`
 
 ---
 
@@ -716,6 +717,10 @@ Returns full node and link data for the Obsidian-style graph view.
 | `POST`   | `/api/chat`                   | Chat with your vault (RAG)           |
 | `GET`    | `/api/chat/sessions`          | List chat sessions                   |
 | `GET`    | `/api/cache/stats`            | Semantic cache statistics            |
+| `POST`   | `/api/eval/vote`              | Submit thumbs up/down on a search result |
+| `GET`    | `/api/eval/admin/stats`       | Admin-only: company-wide eval dashboard data |
+| `GET`    | `/api/eval/admin/users`       | Admin-only: list users for the Run Eval picker |
+| `POST`   | `/api/eval/admin/run/{user_id}` | Admin-only: promote thumbs-up votes to golden queries, then run eval for that user |
 | `POST`   | `/whatsapp/webhook`           | Twilio inbound message (signature-verified) |
 | `POST`   | `/slack/events`               | Slack Events API (signature-verified) |
 | `GET`    | `/health`                     | Health check                         |

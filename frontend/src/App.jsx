@@ -11,10 +11,15 @@ import SearchPage from './pages/SearchPage';
 import ChatPage from './pages/ChatPage';
 import RevisionPage from './pages/RevisionPage';
 import AIStorePage from './pages/AIStorePage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 import api from './api';
 
-import { Database, BookOpen, Network, Search, MessageCircle, ShoppingBag } from 'lucide-react';
+import { Database, BookOpen, Network, Search, MessageCircle, ShoppingBag, ShieldCheck } from 'lucide-react';
 import logo from './assets/logo.png';
+
+// Client-side check is cosmetic only (hides the nav link) — the backend's
+// CurrentAdmin dependency (ADMIN_EMAILS) is the actual access control.
+const ADMIN_EMAILS = ['piyushmalav85@gmail.com'];
 
 function Sidebar() {
     const { user, logout } = useAuth();
@@ -30,6 +35,8 @@ function Sidebar() {
         }, 2000); // wait 2s after page load
         return () => clearTimeout(timer);
     }, [user]);
+
+    const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
     const navItems = [
         { to: "/", end: true, icon: <Database size={18} strokeWidth={1.5} />, label: "Vault" },
@@ -66,6 +73,13 @@ function Sidebar() {
                     <span className="nav-link-icon"><ShoppingBag size={18} strokeWidth={1.5} /></span>
                     AI Store
                 </NavLink>
+                {isAdmin && (
+                    <NavLink to="/admin"
+                        className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}>
+                        <span className="nav-link-icon"><ShieldCheck size={18} strokeWidth={1.5} /></span>
+                        Eval Dashboard
+                    </NavLink>
+                )}
             </div>
 
             <div style={{ borderTop: "1px solid var(--border)", padding: "12px 10px" }}>
@@ -99,6 +113,7 @@ function AuthenticatedLayout() {
                     <Route path="/search" element={<SearchPage />} />
                     <Route path="/chat" element={<ChatPage />} />
                     <Route path="/ai-store" element={<AIStorePage />} />
+                    <Route path="/admin" element={<AdminDashboardPage />} />
                 </Routes>
             </main>
         </div>

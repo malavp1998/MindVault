@@ -86,4 +86,15 @@ export const unlinkPhone = () =>
 export const submitVote = (query_text, note_id, vote) =>
     api.post('/eval/vote', { query_text, note_id, vote }).then(r => r.data);
 
+// ─── Admin ─────────────────────────────────────────────────────
+
+export const getAdminStats = () =>
+    api.get('/eval/admin/stats').then(r => r.data);
+
+export const listAdminUsers = () =>
+    api.get('/eval/admin/users').then(r => r.data);
+
+export const triggerAdminRun = (userId) =>
+    api.post(`/eval/admin/run/${userId}`).then(r => r.data);
+
 export default api;
