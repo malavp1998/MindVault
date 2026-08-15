@@ -12,6 +12,7 @@ from firebase_admin import credentials, auth as firebase_auth
 
 from database import get_db
 from models import User
+from config import get_settings
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
@@ -103,3 +104,14 @@ async def get_current_user(
 
 
 CurrentUser = Depends(get_current_user)
+
+
+async def get_current_admin(user: User = CurrentUser) -> User:
+    settings = get_settings()
+    admin_emails = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
+    if not user.email or user.email.lower() not in admin_emails:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
+
+
+CurrentAdmin = Depends(get_current_admin)

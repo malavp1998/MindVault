@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     langchain_project: str = "MindVault"
     langchain_endpoint: str = "https://api.smith.langchain.com"
 
+    # Admin access — comma-separated emails allowed into the internal eval dashboard
+    admin_emails: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
