@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     jina_api_key: str = ""
 
     # LLM Model Settings
-    llm_english_primary: str = "llama-3.3-70b-versatile"
-    llm_english_fallback: str = "llama-3.1-8b-instant"
+    llm_english_primary: str = "openai/gpt-oss-120b"
+    llm_english_fallback: str = "openai/gpt-oss-20b"
     llm_indic_primary: str = "gemini-1.5-flash"
     llm_indic_fallback: str = "sarvam-2b"
 
