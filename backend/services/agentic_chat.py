@@ -46,8 +46,11 @@ class AgentState(TypedDict):
 
 # ── LLM ───────────────────────────────────────────────────────
 
-llm_primary = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, max_retries=0)
-llm_fallback = ChatGroq(model="llama-3.1-8b-instant", temperature=0, max_retries=0)
+from config import get_settings as _get_llm_settings
+
+_llm_settings = _get_llm_settings()
+llm_primary = ChatGroq(model=_llm_settings.llm_english_primary, temperature=0, max_retries=0)
+llm_fallback = ChatGroq(model=_llm_settings.llm_english_fallback, temperature=0, max_retries=0)
 llm = llm_primary.with_fallbacks([llm_fallback])
 
 READ_TOOLS  = [search_vault, read_note]
